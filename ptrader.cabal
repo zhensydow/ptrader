@@ -20,9 +20,14 @@ Library
   Hs-source-dirs:  src
   Default-language:    Haskell2010
   Exposed-modules:     PTrader.Query
+                       PTrader.Report
   Build-depends:       base==4.3.*,
+                       mtl==2.0.*,
+                       transformers==0.2.*,
                        split==0.1.*,
-                       curl==1.3.*
+                       curl==1.3.*,
+                       ansi-terminal==0.5.*
+  Ghc-options:         -Wall
   
   -- Modules not exported by this package.
   -- Other-modules:       
