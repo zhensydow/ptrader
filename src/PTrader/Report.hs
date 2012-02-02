@@ -74,6 +74,9 @@ newScreen = io clearScreen >> io (setCursorPosition 0 0)
 -- -----------------------------------------------------------------------------
 stocksState :: [String] -> Report ()
 stocksState stocks = do
+  setForegroundColor Vivid Black
+  io $ putStrLn "Name\t\t\tValue\tChange\tOpen\tMin\tMax"
+  clearColor
   dat <- io $ getMulValues stocks stockVals
   forM_ dat outStockState
     where 
