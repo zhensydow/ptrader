@@ -35,7 +35,14 @@ data StockValue = StockSymbol
                 | PercentChange 
                 | DayLow 
                 | DayHigh 
+                | Open
                 | PreviousClose
+                | PERatio
+                | PEGRatio
+                | DividendYield
+                | DividendShare
+                | DividendPayDate
+                | DividendExDate
                 deriving( Show )
                         
 -- -----------------------------------------------------------------------------
@@ -51,6 +58,12 @@ yahooTag PercentChange = "p2"
 yahooTag DayLow = "g"
 yahooTag DayHigh = "h"
 yahooTag PreviousClose = "p"
+yahooTag PERatio = "r"
+yahooTag PEGRatio = "r5"
+yahooTag DividendYield = "y"
+yahooTag DividendShare = "d"
+yahooTag DividendPayDate = "r1"
+yahooTag DividendExDate = "q"
 
 -- -----------------------------------------------------------------------------
 yahooUrl = "http://finance.yahoo.com/d/quotes.csv"
