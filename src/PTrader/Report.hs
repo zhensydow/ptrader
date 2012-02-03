@@ -17,7 +17,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module PTrader.Report( 
-  Report, runReport, stocksState, clearColor, newScreen 
+  -- * Report Monad
+  Report, runReport,
+  -- * Pre-defined Reports
+  clearColor, newScreen, newLine, stocksState, indexState
   ) where
 
 -- -----------------------------------------------------------------------------
@@ -100,7 +103,7 @@ outStockState vals = do
   outName
   outStr ((vals !! 1) ++ "\t")
   outChange
-  forM_ (drop 3 vals) $ \l -> 
+  forM_ (drop 3 vals) $ \l ->
     outStr (l ++ "\t")
   newLine
     
@@ -118,7 +121,41 @@ outStockState vals = do
         if (change !! 0) == '-'
           then setForegroundColor Vivid Red
           else setForegroundColor Vivid Green
-        io $ putStr (change ++ "\t")
+        outStr (change ++ "\t")
+        clearColor
+
+-- -----------------------------------------------------------------------------
+indexState :: [String] -> Report ()
+indexState idx = do
+  setForegroundColor Vivid Black
+  outStrLn "Name\t\tChange\tOpen\tMin\tMax"
+  clearColor
+  dat <- io $ getMulValues idx stockVals
+  forM_ dat outIndexState
+    where
+      stockVals = [StockName, PercentChange, Open, DayLow, DayHigh]
+
+outIndexState :: [String] -> Report ()
+outIndexState vals = do
+  outName
+  outChange
+  forM_ (drop 2 vals) $ \l ->
+    outStr (l ++ "\t")
+  newLine
+    where
+      name = read (head vals) :: String
+      outName = do
+        setForegroundColor Dull Blue
+        outStr (name ++ "\t")
+        when (length name <8) $ outStr "\t"
+        clearColor
+
+      change = read (vals !! 1) :: String
+      outChange = do
+        if (change !! 0) == '-'
+          then setForegroundColor Vivid Red
+          else setForegroundColor Vivid Green
+        outStr (change ++ "\t")
         clearColor
   
 -- -----------------------------------------------------------------------------
