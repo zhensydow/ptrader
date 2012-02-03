@@ -57,6 +57,7 @@ yahooTag Change = "c1"
 yahooTag PercentChange = "p2"
 yahooTag DayLow = "g"
 yahooTag DayHigh = "h"
+yahooTag Open = "o"
 yahooTag PreviousClose = "p"
 yahooTag PERatio = "r"
 yahooTag PEGRatio = "r5"
@@ -66,9 +67,11 @@ yahooTag DividendPayDate = "r1"
 yahooTag DividendExDate = "q"
 
 -- -----------------------------------------------------------------------------
+yahooUrl :: String
 yahooUrl = "http://finance.yahoo.com/d/quotes.csv"
 
 -- -----------------------------------------------------------------------------
+cleanLine :: String -> [String]
 cleanLine = splitOn "," . filter (/='\r')
 
 -- -----------------------------------------------------------------------------
