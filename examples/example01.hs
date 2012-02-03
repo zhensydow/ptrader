@@ -15,7 +15,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
-import PTrader.Report( Report, runReport, newScreen, stocksState )
+import PTrader.Report(
+  Report, runReport, newScreen, newLine, stocksState, indexState )
 import Control.Monad( forever )
 import System.Posix.Unistd( sleep )
 
@@ -23,10 +24,16 @@ import System.Posix.Unistd( sleep )
 stocks :: [String]
 stocks = ["ENG.MC","SAN.MC","TEF.MC","OHL.MC","FER.MC"]
 
+indexes :: [String]
+indexes = ["^IBEX"]
+
 myReport :: Report ()
 myReport = do
   -- clear console screen
   newScreen
+  -- print the state of indexes
+  indexState indexes
+  newLine
   -- print the state of selected stocks
   stocksState stocks
 
