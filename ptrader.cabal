@@ -11,6 +11,8 @@ Copyright:           (c) 2011 Luis Cabellos
 Category:            Data
 Build-type:          Simple
 Cabal-version:       >=1.10
+Data-dir:            data
+Data-files: 	     *.db
 
 -- Extra files to be distributed with the package, such as examples or
 -- a README.
