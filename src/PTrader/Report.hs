@@ -16,7 +16,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module PTrader.Report( runReport, stocksState, clearColor, newScreen ) where
+module PTrader.Report( 
+  Report, runReport, stocksState, clearColor, newScreen 
+  ) where
 
 -- -----------------------------------------------------------------------------
 import Control.Monad( when, forM_ )
