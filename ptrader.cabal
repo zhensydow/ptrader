@@ -1,7 +1,8 @@
 Name:                ptrader
 Version:             0.1.0
 Synopsis:            Personal Stock Trader Toolbox
-Description:         Personal Stock Trader Toolbox
+Description:         Personal Stock Trader Toolbox. PTrader provides a Stock Trader framework. It allows to get real time stock info from finances.yahoo.com and pretty-print the results on a terminal.
+
 License:             GPL-3
 License-file:        LICENSE
 Author:              Luis Cabellos
