@@ -74,10 +74,21 @@ newScreen :: Report ()
 newScreen = io clearScreen >> io (setCursorPosition 0 0)
   
 -- -----------------------------------------------------------------------------
+outStrLn :: String -> Report ()
+outStrLn = io . putStrLn
+
+outStr :: String -> Report ()
+outStr = io . putStr
+
+-- -----------------------------------------------------------------------------
+newLine :: Report ()
+newLine = outStrLn ""
+
+-- -----------------------------------------------------------------------------
 stocksState :: [String] -> Report ()
 stocksState stocks = do
   setForegroundColor Vivid Black
-  io $ putStrLn "Name\t\t\tValue\tChange\tOpen\tMin\tMax"
+  outStrLn "Name\t\t\tValue\tChange\tOpen\tMin\tMax"
   clearColor
   dat <- io $ getMulValues stocks stockVals
   forM_ dat outStockState
@@ -87,18 +98,19 @@ stocksState stocks = do
 outStockState :: [String] -> Report ()
 outStockState vals = do
   outName
-  io $ putStr ((vals !! 1) ++ "\t")
+  outStr ((vals !! 1) ++ "\t")
   outChange
-  forM_ (drop 3 vals) $ \l -> io $ putStr (l ++ "\t")
-  io $ putStrLn ""
+  forM_ (drop 3 vals) $ \l -> 
+    outStr (l ++ "\t")
+  newLine
     
     where
       name = read (head vals) :: String
       outName = do
         setForegroundColor Dull Blue
-        io $ putStr (name ++ "\t")
-        when (length name <8) $ io $ putStr "\t"
-        when (length name <16) $ io $ putStr "\t"
+        outStr (name ++ "\t")
+        when (length name <8) $ outStr "\t"
+        when (length name <16) $ outStr "\t"
         clearColor
                
       change = read (vals !! 2) :: String
