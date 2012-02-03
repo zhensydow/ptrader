@@ -1,0 +1,27 @@
+* Introduction
+  
+  PTrader provides a Stock Trader framework. It allows to get real time stock
+  info from finances.yahoo.com and pretty-print the results on a terminal.
+
+* Install
+  *Requirements:* curl dev library must be installed to install curl package.
+
+  (On ubuntu: ~apt-get install libcurl4-gnutls-dev~.)
+   
+  With the usual commands to install as a user library, from the source folder:
+  
+  : cabal install --user
+
+  In Ubuntu, sometime the libraries fail to install as user. You can try to
+  install the depends in global and then the ptrader as user:
+
+  : sudo cabal install split==0.1.* curl==1.3.* ansi-terminal==0.5.* --global
+  : cabal install --user
+   
+  Running the example:
+   
+  : ghci examples/example01.hs
+  : *Main> main
+
+** Test on:
+   - Ubuntu, ghc-7.0.3, Haskell Platform 2011.4.0.0
