@@ -17,8 +17,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 import PTrader.Report(
   Report, runReport, newScreen, newLine, stocksState, indexState )
-import Control.Monad( forever )
+import Control.Monad( forever, replicateM_ )
+import System.Exit( exitSuccess )
 import System.Posix.Unistd( sleep )
+import System.Posix.Signals( Handler(..), installHandler, sigINT )
 
 -- -----------------------------------------------------------------------------
 stocks :: [String]
@@ -39,10 +41,12 @@ myReport = do
 
 -- -----------------------------------------------------------------------------
 main :: IO ()
-main = forever $ do
-  -- print myReport using colors
-  runReport myReport True
-  -- wait 1 minute
-  sleep 60
+main = do
+  _ <- installHandler sigINT (CatchOnce exitSuccess) Nothing
+  forever $ do
+    -- print myReport using colors
+    runReport myReport True
+    -- wait 1 minute
+    sleep 60
 
 -- -----------------------------------------------------------------------------
