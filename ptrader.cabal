@@ -30,9 +30,11 @@ Library
                        mtl==2.0.*,
                        transformers==0.2.*,
                        directory==1.1.*,
+                       time==1.2.*,
                        split==0.1.*,
                        curl==1.3.*,
-                       ansi-terminal==0.5.*
+                       ansi-terminal==0.5.*,
+                       sqlite==0.5.*
   Ghc-options:         -Wall
   
   -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.

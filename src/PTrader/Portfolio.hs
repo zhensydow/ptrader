@@ -15,14 +15,30 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
+{-# LANGUAGE GeneralizedNewtypeDeriving, OverloadedStrings #-}
 module PTrader.Portfolio( 
-  createNewPortfolio 
+  createNewPortfolio, runPortfolio, getStockID, insertBuyTransaction
   )where
 
 -- -----------------------------------------------------------------------------
 import Control.Monad( when )
+import Control.Monad.IO.Class( MonadIO, liftIO )
+import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
+import Data.Time.Calendar( Day )
+import Database.SQLite( 
+  SQLiteHandle, Value(..), openConnection, closeConnection,
+  execParamStatement )
 import System.Directory( copyFile )
+import PTrader.Types( StockSymbol(..), StockID(..), CashValue )
 import Paths_ptrader( getDataFileName )
+
+-- -----------------------------------------------------------------------------
+data PortfolioConfig = PortfolioConfig { dbHandle :: SQLiteHandle }
+
+-- -----------------------------------------------------------------------------
+newtype Portfolio a = Portfolio
+                      { runPF :: ReaderT PortfolioConfig IO a }
+                    deriving( Functor, Monad, MonadIO, MonadReader PortfolioConfig )
 
 -- -----------------------------------------------------------------------------
 createNewPortfolio :: FilePath -> IO ()
@@ -31,4 +47,41 @@ createNewPortfolio filename = do
   when (old /= filename) $
     copyFile old filename
   
+-- -----------------------------------------------------------------------------
+runPortfolio :: Portfolio a -> String -> IO a
+runPortfolio portfolio db = do
+  handle <- openConnection db
+  val <- runReaderT (runPF portfolio) (PortfolioConfig handle)
+  closeConnection handle
+  return val
+  
+-- -----------------------------------------------------------------------------
+io :: IO a -> Portfolio a
+io = liftIO
+
+-- -----------------------------------------------------------------------------
+getDbHandle :: Portfolio SQLiteHandle
+getDbHandle = fmap dbHandle ask
+  
+-- -----------------------------------------------------------------------------
+getStockID :: StockSymbol -> Portfolio (Maybe StockID)
+getStockID (StockSymbol symbol) = do
+  db <- getDbHandle
+  io $ do 
+    res <- execParamStatement db "SELECT stockid FROM stock WHERE symbol=:param1" [(":param1",Text symbol)]
+
+    case res of
+      Right ((((_,Int idx):_):_):_) -> return . Just . StockID . fromIntegral $ idx
+      _ -> return Nothing
+  
+-- -----------------------------------------------------------------------------
+insertBuyTransaction :: Day -> StockSymbol -> Int -> CashValue -> CashValue 
+                        -> Portfolio Bool
+insertBuyTransaction day symbol amount price total = do
+  stockRet <- getStockID symbol
+  case stockRet of
+    Nothing -> return False
+    Just (StockID idx) -> do
+      return True
+
 -- -----------------------------------------------------------------------------
