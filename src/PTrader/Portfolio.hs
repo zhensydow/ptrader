@@ -18,11 +18,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module PTrader.Portfolio(
   -- * Types
-  CashValue,
+  CashValue, ProfitType,
   -- * Portfolio Monad
   Portfolio, createNewPortfolio, runPortfolio,
   -- * Portfolio Update/Query functions
-  insertBuyTransaction, insertSellTransaction,
+  insertBuyTransaction, insertSellTransaction, insertProfit,
   calcStockAmount, calcStockNet, ownedStocks
   )where
 
@@ -45,6 +45,18 @@ import Paths_ptrader( getDataFileName )
 newtype StockID = StockID Int
                 deriving( Show )
 
+data ProfitType = Dividend | CapitalIncrease | Other
+                deriving( Show )
+
+instance Enum ProfitType where
+  fromEnum Dividend = 0
+  fromEnum CapitalIncrease = 1
+  fromEnum Other = 2
+  toEnum 0 = Dividend
+  toEnum 1 = CapitalIncrease
+  toEnum 2 = Other
+  toEnum _ = error "invalid ProfitType"
+                        
 -- -----------------------------------------------------------------------------
 cashResolution :: Int
 cashResolution = fromIntegral $ resolution (undefined :: CashValue)
@@ -222,6 +234,19 @@ calcTotalSold (StockID idx) = do
       sql  = "SELECT SUM(total) FROM sell WHERE stockid=:par"
 
 -- -----------------------------------------------------------------------------
+calcStockProfit :: StockSymbol -> Portfolio CashValue
+calcStockProfit symbol =
+  getStockID symbol
+  >>= maybe (return 0) (\(StockID idx) -> do
+                           let param =  [(":par",Int $ fromIntegral idx)]
+                           res <- execPFParamStatement sql param
+                           case res of
+                             Right [[[(_,Int n)]]] -> return $ intToCash n
+                             _ -> return 0)
+    where
+      sql  = "SELECT SUM(total) FROM profit WHERE stockid=:par"
+
+-- -----------------------------------------------------------------------------
 ownedStocks :: Portfolio [(StockSymbol, Int)]
 ownedStocks = do
   resBuys <- execPFStatement sqlBuys :: Portfolio (Either String [[Row Value]])
@@ -245,5 +270,19 @@ ownedStocks = do
           _ -> Nothing
         amount <- lookup "amount" row
         return (stockid, amount)
+
+-- -----------------------------------------------------------------------------
+insertProfit :: Day -> StockSymbol -> ProfitType -> CashValue -> Portfolio Bool
+insertProfit day symbol ptype total = do
+  stockRet <- getStockID symbol
+  case stockRet of
+    Nothing -> return False
+    Just (StockID idx) -> execPFParamStatement_ sql
+                          [(":stockid", Int $ fromIntegral idx)
+                          ,(":date", Text $ showGregorian day)
+                          ,(":type", Int . fromIntegral . fromEnum $ ptype )
+                          ,(":total", cashToValue total)]
+    where
+      sql = "INSERT INTO profit VALUES (NULL,:stockid,:date,:type,:total)"
 
 -- -----------------------------------------------------------------------------
