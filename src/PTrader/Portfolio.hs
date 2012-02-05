@@ -15,22 +15,24 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
-{-# LANGUAGE GeneralizedNewtypeDeriving, OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module PTrader.Portfolio(
   CashValue,
   createNewPortfolio, runPortfolio, insertBuyTransaction, insertSellTransaction,
-  calcStockAmount
+  calcStockAmount, ownedStocks
   )where
 
 -- -----------------------------------------------------------------------------
-import Control.Monad( when )
+import Control.Monad( when, forM, liftM )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
+import Data.Maybe( catMaybes )
 import Data.Time.Calendar( Day, showGregorian )
 import Data.Fixed( resolution )
 import Database.SQLite(
   SQLiteHandle, SQLiteResult, Row, Value(..),
-  openConnection, closeConnection, execParamStatement, execParamStatement_ )
+  openConnection, closeConnection, execStatement,
+  execParamStatement, execParamStatement_ )
 import System.Directory( copyFile )
 import PTrader.Types( StockSymbol, CashValue )
 import Paths_ptrader( getDataFileName )
@@ -77,16 +79,20 @@ getDbHandle :: Portfolio SQLiteHandle
 getDbHandle = fmap dbHandle ask
 
 -- -----------------------------------------------------------------------------
+execPFStatement :: SQLiteResult a => String
+                   -> Portfolio (Either String [[Row a]])
+execPFStatement sql = getDbHandle >>= \db -> io $ execStatement db sql
+
 execPFParamStatement :: SQLiteResult a => String -> [(String, Value)]
                         -> Portfolio (Either String [[Row a]])
-execPFParamStatement sql params = do
+execPFParamStatement sql ps = do
   db <- getDbHandle
-  io $ execParamStatement db sql params
+  io $ execParamStatement db sql ps
 
 execPFParamStatement_ :: String -> [(String,Value)] -> Portfolio Bool
-execPFParamStatement_ sql params = do
+execPFParamStatement_ sql ps = do
   db <- getDbHandle
-  res <- io $ execParamStatement_ db sql params
+  res <- io $ execParamStatement_ db sql ps
   maybe (return True) (\msg -> io $ putStrLn msg >> return False) res
 
 -- -----------------------------------------------------------------------------
@@ -100,6 +106,16 @@ getStockID symbol = do
     where
       sql = "SELECT stockid FROM stock WHERE symbol=:param1"
 
+getStockSymbol :: StockID -> Portfolio (Maybe StockSymbol)
+getStockSymbol (StockID idx) = do
+  res <- execPFParamStatement sql [(":par", Int . fromIntegral $ idx)]
+  case res of
+    Right ((((_,Text sym):_):_):_) -> return . Just $ sym
+    _ -> return Nothing
+
+    where
+      sql = "SELECT symbol FROM stock WHERE stockid=:par"
+
 -- -----------------------------------------------------------------------------
 insertBuyTransaction :: Day -> StockSymbol -> Int -> CashValue -> CashValue
                         -> Portfolio Bool
@@ -107,12 +123,12 @@ insertBuyTransaction day symbol amount price total = do
   stockRet <- getStockID symbol
   case stockRet of
     Nothing -> return False
-    Just (StockID idx) -> do
-      execPFParamStatement_ sql [(":stockid", Int $ fromIntegral idx)
-                                ,(":date", Text $ showGregorian day)
-                                ,(":amount", Int $ fromIntegral amount)
-                                ,(":price", cashToValue price)
-                                ,(":total", cashToValue total)]
+    Just (StockID idx) -> execPFParamStatement_ sql
+                          [(":stockid", Int $ fromIntegral idx)
+                          ,(":date", Text $ showGregorian day)
+                          ,(":amount", Int $ fromIntegral amount)
+                          ,(":price", cashToValue price)
+                          ,(":total", cashToValue total)]
     where
       sql = "INSERT INTO buy VALUES (NULL,:stockid,:date,:amount,:price,:total)"
 
@@ -123,12 +139,12 @@ insertSellTransaction day symbol amount price total = do
   stockRet <- getStockID symbol
   case stockRet of
     Nothing -> return False
-    Just (StockID idx) -> do
-      execPFParamStatement_ sql [(":stockid", Int $ fromIntegral idx)
-                                ,(":date", Text $ showGregorian day)
-                                ,(":amount", Int $ fromIntegral amount)
-                                ,(":price", cashToValue price)
-                                ,(":total", cashToValue total)]
+    Just (StockID idx) -> execPFParamStatement_ sql
+                          [(":stockid", Int $ fromIntegral idx)
+                          ,(":date", Text $ showGregorian day)
+                          ,(":amount", Int $ fromIntegral amount)
+                          ,(":price", cashToValue price)
+                          ,(":total", cashToValue total)]
     where
       sql = "INSERT INTO sell VALUES (NULL,:stockid,:date,:amount,:price,:total)"
 
@@ -138,20 +154,57 @@ calcStockAmount symbol = do
   stockRet <- getStockID symbol
   case stockRet of
     Nothing -> return 0
-    Just (StockID idx) -> do
-      let params = [(":param1",Int $ fromIntegral idx)]
-      resBuy <- execPFParamStatement sqlBuy params
-      let buyed = case resBuy of
-            Right [[[(_,Int n)]]] -> fromIntegral n
-            _ -> 0
-      resSell <- execPFParamStatement sqlSell params
-      let selled = case resSell of
-            Right [[[(_,Int n)]]] -> fromIntegral n
-            _ -> 0
+    Just idx -> do
+      buyed <- calcBuyedStocks idx
+      selled <- calcSelledStocks idx
       return (buyed - selled)
 
+-- -----------------------------------------------------------------------------
+calcBuyedStocks :: StockID -> Portfolio Int
+calcBuyedStocks (StockID idx) = do
+  res <- execPFParamStatement sql [(":par",Int $ fromIntegral idx)]
+  case res of
+    Right [[[(_,Int n)]]] -> return $ fromIntegral n
+    _ -> return 0
+
     where
-      sqlBuy = "SELECT SUM(amount) FROM buy WHERE stockid=:param1"
-      sqlSell = "SELECT SUM(amount) FROM sell WHERE stockid=:param1"
-      
+      sql  = "SELECT SUM(amount) FROM buy WHERE stockid=:par"
+
+calcSelledStocks :: StockID -> Portfolio Int
+calcSelledStocks (StockID idx) = do
+  res <- execPFParamStatement sql [(":par",Int $ fromIntegral idx)]
+  case res of
+    Right [[[(_,Int n)]]] -> return $ fromIntegral n
+    _ -> return 0
+
+    where
+      sql  = "SELECT SUM(amount) FROM sell WHERE stockid=:par"
+
+-- -----------------------------------------------------------------------------
+ownedStocks :: Portfolio [(StockSymbol, Int)]
+ownedStocks = do
+  resBuys <- execPFStatement sqlBuys :: Portfolio (Either String [[Row Value]])
+  case resBuys of
+    Right [xs] -> do
+      liftM catMaybes $ forM xs $ \x -> do
+        case extractData x of
+          Just (idx, Int v) -> do
+            sym <- getStockSymbol idx
+            case sym of
+              Just name -> do
+                selled <- calcSelledStocks idx
+                return . Just $ (name, (fromIntegral v) - selled)
+              _ -> return Nothing
+          _ -> return Nothing
+    _ -> return []
+
+    where
+      sqlBuys = "SELECT stockid, sum(amount) AS amount FROM buy GROUP BY stockid"
+      extractData xs = do
+        stockid <- case lookup "stockid" xs of
+          Just (Int x) -> return . StockID . fromIntegral $ x
+          _ -> Nothing
+        amount <- lookup "amount" xs
+        return (stockid, amount)
+
 -- -----------------------------------------------------------------------------
