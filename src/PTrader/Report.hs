@@ -31,6 +31,7 @@ import System.Console.ANSI(
   SGR(..), ConsoleLayer(..), Color(..), ColorIntensity(..), 
   setSGR, clearScreen, setCursorPosition )
 import PTrader.Query( StockValue(..), getMulValues )
+import PTrader.Types( StockSymbol )
 
 -- -----------------------------------------------------------------------------
 data ReportConfig = ReportConfig { reportInColor :: ! Bool }
@@ -88,7 +89,7 @@ newLine :: Report ()
 newLine = outStrLn ""
 
 -- -----------------------------------------------------------------------------
-stocksState :: [String] -> Report ()
+stocksState :: [StockSymbol] -> Report ()
 stocksState stocks = do
   setForegroundColor Vivid Black
   outStrLn "Name\t\t\tValue\tChange\tOpen\tMin\tMax"
@@ -122,10 +123,9 @@ outStockState vals = do
           then setForegroundColor Vivid Red
           else setForegroundColor Vivid Green
         outStr (change ++ "\t")
-        clearColor
 
 -- -----------------------------------------------------------------------------
-indexState :: [String] -> Report ()
+indexState :: [StockName] -> Report ()
 indexState idx = do
   setForegroundColor Vivid Black
   outStrLn "Name\t\tChange\tOpen\tMin\tMax"
