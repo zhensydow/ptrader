@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 import PTrader.Report(
   Report, runReport, newScreen, newLine, stocksState, indexState )
-import Control.Monad( forever, replicateM_ )
+import Control.Monad( forever )
 import System.Exit( exitSuccess )
 import System.Posix.Unistd( sleep )
 import System.Posix.Signals( Handler(..), installHandler, sigINT )
