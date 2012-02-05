@@ -41,8 +41,8 @@ newtype Report a = Report
                    deriving( Functor, Monad, MonadIO, MonadReader ReportConfig )
                    
 -- -----------------------------------------------------------------------------
-runReport :: Report a -> Bool -> IO a
-runReport report color = runReaderT (runR report) (ReportConfig color)
+runReport :: MonadIO m => Report a -> Bool -> m a
+runReport report color = liftIO $ runReaderT (runR report) (ReportConfig color)
 
 -- -----------------------------------------------------------------------------
 io :: IO a -> Report a

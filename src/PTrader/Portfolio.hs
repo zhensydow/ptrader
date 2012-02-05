@@ -88,8 +88,8 @@ createNewPortfolio filename = do
     copyFile old filename
 
 -- -----------------------------------------------------------------------------
-runPortfolio :: Portfolio a -> String -> IO a
-runPortfolio portfolio db = do
+runPortfolio :: MonadIO m => Portfolio a -> String -> m a
+runPortfolio portfolio db = liftIO $ do
   handle <- openConnection db
   val <- runReaderT (runPF portfolio) (PortfolioConfig handle)
   closeConnection handle
