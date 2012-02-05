@@ -20,7 +20,7 @@ module PTrader.Report(
   -- * Report Monad
   Report, runReport,
   -- * Pre-defined Reports
-  clearColor, newScreen, newLine, stocksState, indexState
+  clearColor, newScreen, newLine, stocksState, indexState, stocksProfit
   ) where
 
 -- -----------------------------------------------------------------------------
@@ -31,7 +31,7 @@ import System.Console.ANSI(
   SGR(..), ConsoleLayer(..), Color(..), ColorIntensity(..), 
   setSGR, clearScreen, setCursorPosition )
 import PTrader.Query( StockValue(..), getMulValues )
-import PTrader.Types( StockSymbol )
+import PTrader.Types( StockSymbol, CashValue )
 
 -- -----------------------------------------------------------------------------
 data ReportConfig = ReportConfig { reportInColor :: ! Bool }
@@ -43,7 +43,7 @@ newtype Report a = Report
                    
 -- -----------------------------------------------------------------------------
 runReport :: MonadIO m => Report a -> Bool -> m a
-runReport report color = liftIO $ runReaderT (runR report) (ReportConfig color)
+runReport report = liftIO . runReaderT (runR report) . ReportConfig
 
 -- -----------------------------------------------------------------------------
 io :: IO a -> Report a
@@ -104,8 +104,7 @@ outStockState vals = do
   outName
   outStr ((vals !! 1) ++ "\t")
   outChange
-  forM_ (drop 3 vals) $ \l ->
-    outStr (l ++ "\t")
+  forM_ (drop 3 vals) (outStr . (++ "\t"))
   newLine
     
     where
@@ -119,13 +118,13 @@ outStockState vals = do
                
       change = read (vals !! 2) :: String
       outChange = do
-        if (change !! 0) == '-'
+        if head change == '-'
           then setForegroundColor Vivid Red
           else setForegroundColor Vivid Green
         outStr (change ++ "\t")
 
 -- -----------------------------------------------------------------------------
-indexState :: [StockName] -> Report ()
+indexState :: [StockSymbol] -> Report ()
 indexState idx = do
   setForegroundColor Vivid Black
   outStrLn "Name\t\tChange\tOpen\tMin\tMax"
@@ -139,8 +138,7 @@ outIndexState :: [String] -> Report ()
 outIndexState vals = do
   outName
   outChange
-  forM_ (drop 2 vals) $ \l ->
-    outStr (l ++ "\t")
+  forM_ (drop 2 vals) (outStr . (++"\t"))
   newLine
     where
       name = read (head vals) :: String
@@ -152,10 +150,54 @@ outIndexState vals = do
 
       change = read (vals !! 1) :: String
       outChange = do
-        if (change !! 0) == '-'
+        if head change == '-'
           then setForegroundColor Vivid Red
           else setForegroundColor Vivid Green
         outStr (change ++ "\t")
         clearColor
   
+-- -----------------------------------------------------------------------------
+stocksProfit :: [((StockSymbol,Int),CashValue)] -> Report ()
+stocksProfit stocks = do
+  setForegroundColor Vivid Black
+  outStrLn "Name\t\t\tAmount\tValue\t\tSpent\t\tProfit"
+  clearColor
+  dat <- io $ getMulValues (fmap (fst.fst) stocks) stockVals
+  forM_ (zip3 (fmap (snd.fst) stocks) (fmap snd stocks) dat) outStockProfit 
+    where
+      stockVals = [StockName, Bid]
+  
+outStockProfit :: (Int,CashValue,[String]) -> Report ()
+outStockProfit (amount, spent, vals) = do
+  outName
+  outStr $ show amount ++ "\t"
+  outValue
+  outSpent
+  outProfit
+  newLine
+    where
+      name = read (head vals) :: String
+      outName = do
+        setForegroundColor Dull Blue
+        outStr (name ++ "\t")
+        when (length name <8) $ outStr "\t"
+        when (length name <16) $ outStr "\t"
+        clearColor
+      price = ((fromRational . toRational) (read (vals !! 1)::Double)) :: CashValue
+      value = price * fromIntegral amount
+      profit = value - spent
+      percent = (value * 100) / spent
+      outValue = do
+        outStr $ (show value ) ++ "\t"
+        when (value < 1000) $ outStr "\t"
+      outSpent = do
+        outStr $ (show spent) ++ "\t"
+        when (spent < 1000) $ outStr "\t"        
+      outProfit = do
+        if profit < 0
+          then setForegroundColor Vivid Red
+          else setForegroundColor Vivid Green
+        outStr $ (show profit) ++ " (" ++ show percent ++ "%)"
+        clearColor
+
 -- -----------------------------------------------------------------------------
