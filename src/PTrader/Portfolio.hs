@@ -17,9 +17,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module PTrader.Portfolio(
+  -- * Types
   CashValue,
-  createNewPortfolio, runPortfolio, insertBuyTransaction, insertSellTransaction,
-  calcStockAmount, ownedStocks
+  -- * Portfolio Monad
+  Portfolio, createNewPortfolio, runPortfolio,
+  -- * Portfolio Update/Query functions
+  insertBuyTransaction, insertSellTransaction,
+  calcStockAmount, calcStockNet, ownedStocks
   )where
 
 -- -----------------------------------------------------------------------------
@@ -42,10 +46,19 @@ newtype StockID = StockID Int
                 deriving( Show )
 
 -- -----------------------------------------------------------------------------
+cashResolution :: Int
+cashResolution = fromIntegral $ resolution (undefined :: CashValue)
+
 cashToValue :: CashValue -> Value
 cashToValue v = Int val
   where
-    val = round (v*(fromIntegral $ resolution v))
+    val = round (v * fromIntegral cashResolution)
+
+intToCash :: Integral a => a -> CashValue
+intToCash v = fromIntegral v / fromIntegral cashResolution
+
+intToStockID :: Integral a => a -> StockID
+intToStockID = StockID . fromIntegral
 
 -- -----------------------------------------------------------------------------
 data PortfolioConfig = PortfolioConfig { dbHandle :: SQLiteHandle }
@@ -100,7 +113,7 @@ getStockID :: StockSymbol -> Portfolio (Maybe StockID)
 getStockID symbol = do
   res <- execPFParamStatement sql [(":param1",Text symbol)]
   case res of
-    Right ((((_,Int idx):_):_):_) -> return . Just . StockID . fromIntegral $ idx
+    Right ((((_,Int idx):_):_):_) -> return . Just . intToStockID $ idx
     _ -> return Nothing
 
     where
@@ -150,18 +163,16 @@ insertSellTransaction day symbol amount price total = do
 
 -- -----------------------------------------------------------------------------
 calcStockAmount :: StockSymbol -> Portfolio Int
-calcStockAmount symbol = do
-  stockRet <- getStockID symbol
-  case stockRet of
-    Nothing -> return 0
-    Just idx -> do
-      buyed <- calcBuyedStocks idx
-      selled <- calcSelledStocks idx
-      return (buyed - selled)
+calcStockAmount symbol = 
+  getStockID symbol 
+  >>= maybe (return 0) (\idx -> do
+                           bought <- calcBoughtStocks idx
+                           sold <- calcSoldStocks idx
+                           return (bought - sold))
 
 -- -----------------------------------------------------------------------------
-calcBuyedStocks :: StockID -> Portfolio Int
-calcBuyedStocks (StockID idx) = do
+calcBoughtStocks :: StockID -> Portfolio Int
+calcBoughtStocks (StockID idx) = do
   res <- execPFParamStatement sql [(":par",Int $ fromIntegral idx)]
   case res of
     Right [[[(_,Int n)]]] -> return $ fromIntegral n
@@ -170,8 +181,8 @@ calcBuyedStocks (StockID idx) = do
     where
       sql  = "SELECT SUM(amount) FROM buy WHERE stockid=:par"
 
-calcSelledStocks :: StockID -> Portfolio Int
-calcSelledStocks (StockID idx) = do
+calcSoldStocks :: StockID -> Portfolio Int
+calcSoldStocks (StockID idx) = do
   res <- execPFParamStatement sql [(":par",Int $ fromIntegral idx)]
   case res of
     Right [[[(_,Int n)]]] -> return $ fromIntegral n
@@ -181,30 +192,58 @@ calcSelledStocks (StockID idx) = do
       sql  = "SELECT SUM(amount) FROM sell WHERE stockid=:par"
 
 -- -----------------------------------------------------------------------------
+calcStockNet :: StockSymbol -> Portfolio CashValue
+calcStockNet symbol =
+  getStockID symbol
+  >>= maybe (return 0) (\idx -> do
+                           bought <- calcTotalBought idx
+                           sold <- calcTotalSold idx
+                           return (bought - sold))
+
+-- -----------------------------------------------------------------------------
+calcTotalBought :: StockID -> Portfolio CashValue
+calcTotalBought (StockID idx) = do
+  res <- execPFParamStatement sql [(":par",Int $ fromIntegral idx)]
+  case res of
+    Right [[[(_,Int n)]]] -> return $ intToCash n
+    _ -> return 0
+
+    where
+      sql  = "SELECT SUM(total) FROM buy WHERE stockid=:par"
+
+calcTotalSold :: StockID -> Portfolio CashValue
+calcTotalSold (StockID idx) = do
+  res <- execPFParamStatement sql [(":par",Int $ fromIntegral idx)]
+  case res of
+    Right [[[(_,Int n)]]] -> return $ intToCash n
+    _ -> return 0
+
+    where
+      sql  = "SELECT SUM(total) FROM sell WHERE stockid=:par"
+
+-- -----------------------------------------------------------------------------
 ownedStocks :: Portfolio [(StockSymbol, Int)]
 ownedStocks = do
   resBuys <- execPFStatement sqlBuys :: Portfolio (Either String [[Row Value]])
   case resBuys of
-    Right [xs] -> do
-      liftM catMaybes $ forM xs $ \x -> do
-        case extractData x of
-          Just (idx, Int v) -> do
-            sym <- getStockSymbol idx
-            case sym of
-              Just name -> do
-                selled <- calcSelledStocks idx
-                return . Just $ (name, (fromIntegral v) - selled)
-              _ -> return Nothing
-          _ -> return Nothing
+    Right [rows] -> liftM catMaybes $ forM rows $ \row ->
+      case extractData row of
+        Just (idx, Int v) -> getStockSymbol idx
+                             >>= maybe 
+                             (return Nothing)
+                             (\name -> do
+                                 sell <- calcSoldStocks idx
+                                 return . Just $ (name, fromIntegral v - sell))
+        _ -> return Nothing
     _ -> return []
 
     where
       sqlBuys = "SELECT stockid, sum(amount) AS amount FROM buy GROUP BY stockid"
-      extractData xs = do
-        stockid <- case lookup "stockid" xs of
-          Just (Int x) -> return . StockID . fromIntegral $ x
+      extractData row = do
+        stockid <- case lookup "stockid" row of
+          Just (Int x) -> return . intToStockID $ x
           _ -> Nothing
-        amount <- lookup "amount" xs
+        amount <- lookup "amount" row
         return (stockid, amount)
 
 -- -----------------------------------------------------------------------------
