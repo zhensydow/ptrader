@@ -31,7 +31,7 @@ indexes = ["^IBEX"]
 
 myReport :: String -> Report ()
 myReport filename = do
-  stocks <- runPortfolio (ownedStocks) filename
+  stocks <- runPortfolio ownedStocks filename
   -- clear console screen
   newScreen
   -- print the state of indexes
@@ -40,8 +40,7 @@ myReport filename = do
   -- print the state of selected stocks
   stocksState (fmap fst stocks)
   
-  spents <- forM (map fst stocks) $ \x -> 
-    runPortfolio (calcStockNet x) filename
+  spents <- runPortfolio (forM (map fst stocks) calcStockNet) filename
 
   newLine
   -- print teoric profit
