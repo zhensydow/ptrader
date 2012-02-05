@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 module PTrader.Types(
-  StockSymbol, CashValue(..)
+  StockSymbol, CashValue
   )where
 
 -- -----------------------------------------------------------------------------
@@ -26,6 +26,6 @@ import Data.Fixed( Milli )
 type StockSymbol = String
 
 -- -----------------------------------------------------------------------------
-newtype CashValue = CashValue Milli
+type CashValue = Milli
 
 -- -----------------------------------------------------------------------------

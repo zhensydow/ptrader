@@ -17,17 +17,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 {-# LANGUAGE GeneralizedNewtypeDeriving, OverloadedStrings #-}
 module PTrader.Portfolio( 
-  createNewPortfolio, runPortfolio, insertBuyTransaction
+  CashValue, 
+  createNewPortfolio, runPortfolio, insertBuyTransaction, insertSellTransaction
   )where
 
 -- -----------------------------------------------------------------------------
 import Control.Monad( when )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
-import Data.Time.Calendar( Day )
+import Data.Time.Calendar( Day, showGregorian )
+import Data.Fixed( resolution )
 import Database.SQLite( 
   SQLiteHandle, Value(..), openConnection, closeConnection,
-  execParamStatement )
+  execParamStatement, execParamStatement_ )
 import System.Directory( copyFile )
 import PTrader.Types( StockSymbol, CashValue )
 import Paths_ptrader( getDataFileName )
@@ -35,6 +37,12 @@ import Paths_ptrader( getDataFileName )
 -- -----------------------------------------------------------------------------
 newtype StockID = StockID Int
                 deriving( Show )
+
+-- -----------------------------------------------------------------------------
+cashToValue :: CashValue -> Value
+cashToValue v = Int val
+  where
+    val = round (v*(fromIntegral $ resolution v))
 
 -- -----------------------------------------------------------------------------
 data PortfolioConfig = PortfolioConfig { dbHandle :: SQLiteHandle }
@@ -87,6 +95,32 @@ insertBuyTransaction day symbol amount price total = do
   case stockRet of
     Nothing -> return False
     Just (StockID idx) -> do
-      return True
+      db <- getDbHandle
+      res <- io $ execParamStatement_ db sql [(":stockid", Int $ fromIntegral idx)
+                                             ,(":date", Text $ showGregorian day)
+                                             ,(":amount", Int $ fromIntegral amount)
+                                             ,(":price", cashToValue price)
+                                             ,(":total", cashToValue total)]
+      maybe (return True) (\msg -> io $ putStrLn msg >> return False) res
+    where
+      sql = "INSERT INTO buy VALUES (NULL,:stockid,:date,:amount,:price,:total)"
+
+-- -----------------------------------------------------------------------------
+insertSellTransaction :: Day -> StockSymbol -> Int -> CashValue -> CashValue 
+                         -> Portfolio Bool
+insertSellTransaction day symbol amount price total = do
+  stockRet <- getStockID symbol
+  case stockRet of
+    Nothing -> return False
+    Just (StockID idx) -> do
+      db <- getDbHandle
+      res <- io $ execParamStatement_ db sql [(":stockid", Int $ fromIntegral idx)
+                                             ,(":date", Text $ showGregorian day)
+                                             ,(":amount", Int $ fromIntegral amount)
+                                             ,(":price", cashToValue price)
+                                             ,(":total", cashToValue total)]
+      maybe (return True) (\msg -> io $ putStrLn msg >> return False) res
+    where
+      sql = "INSERT INTO sell VALUES (NULL,:stockid,:date,:amount,:price,:total)"
 
 -- -----------------------------------------------------------------------------
