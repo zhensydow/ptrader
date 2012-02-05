@@ -16,21 +16,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 module PTrader.Types(
-  StockSymbol(..), StockID(..), CashValue(..)
+  StockSymbol, CashValue(..)
   )where
 
 -- -----------------------------------------------------------------------------
 import Data.Fixed( Milli )
-import Data.String( IsString(..) )
 
 -- -----------------------------------------------------------------------------
-newtype StockSymbol = StockSymbol String
-                    deriving( Show )
-newtype StockID = StockID Int
-                deriving( Show )
-
-instance IsString StockSymbol where
-  fromString = StockSymbol
+type StockSymbol = String
 
 -- -----------------------------------------------------------------------------
 newtype CashValue = CashValue Milli

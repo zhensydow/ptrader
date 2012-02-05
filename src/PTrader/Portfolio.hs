@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 {-# LANGUAGE GeneralizedNewtypeDeriving, OverloadedStrings #-}
 module PTrader.Portfolio( 
-  createNewPortfolio, runPortfolio, getStockID, insertBuyTransaction
+  createNewPortfolio, runPortfolio, insertBuyTransaction
   )where
 
 -- -----------------------------------------------------------------------------
@@ -29,8 +29,12 @@ import Database.SQLite(
   SQLiteHandle, Value(..), openConnection, closeConnection,
   execParamStatement )
 import System.Directory( copyFile )
-import PTrader.Types( StockSymbol(..), StockID(..), CashValue )
+import PTrader.Types( StockSymbol, CashValue )
 import Paths_ptrader( getDataFileName )
+
+-- -----------------------------------------------------------------------------
+newtype StockID = StockID Int
+                deriving( Show )
 
 -- -----------------------------------------------------------------------------
 data PortfolioConfig = PortfolioConfig { dbHandle :: SQLiteHandle }
@@ -65,15 +69,16 @@ getDbHandle = fmap dbHandle ask
   
 -- -----------------------------------------------------------------------------
 getStockID :: StockSymbol -> Portfolio (Maybe StockID)
-getStockID (StockSymbol symbol) = do
+getStockID symbol = do
   db <- getDbHandle
-  io $ do 
-    res <- execParamStatement db "SELECT stockid FROM stock WHERE symbol=:param1" [(":param1",Text symbol)]
-
-    case res of
-      Right ((((_,Int idx):_):_):_) -> return . Just . StockID . fromIntegral $ idx
-      _ -> return Nothing
+  res <- io $ execParamStatement db sql [(":param1",Text symbol)]
+  case res of
+    Right ((((_,Int idx):_):_):_) -> return . Just . StockID . fromIntegral $ idx
+    _ -> return Nothing
   
+    where
+      sql = "SELECT stockid FROM stock WHERE symbol=:param1"
+      
 -- -----------------------------------------------------------------------------
 insertBuyTransaction :: Day -> StockSymbol -> Int -> CashValue -> CashValue 
                         -> Portfolio Bool
