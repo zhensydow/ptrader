@@ -25,6 +25,7 @@ Library
   Exposed-modules:     PTrader.Query
                        PTrader.Report
                        PTrader.Portfolio
+                       PTrader.Types
   Other-modules:       Paths_ptrader
   Build-depends:       base==4.3.*,
                        mtl==2.0.*,
