@@ -15,38 +15,17 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
-import PTrader.Report(
-  Report, runReport, newScreen, newLine, stocksState, indexState )
-import Control.Monad( forever )
-import System.Exit( exitSuccess )
-import System.Posix.Unistd( sleep )
-import System.Posix.Signals( Handler(..), installHandler, sigINT )
+module PTrader.Types(
+  StockSymbol, CashValue
+  )where
 
 -- -----------------------------------------------------------------------------
-stocks :: [String]
-stocks = ["ENG.MC","SAN.MC","TEF.MC","OHL.MC","FER.MC"]
-
-indexes :: [String]
-indexes = ["^IBEX"]
-
-myReport :: Report ()
-myReport = do
-  -- clear console screen
-  newScreen
-  -- print the state of indexes
-  indexState indexes
-  newLine
-  -- print the state of selected stocks
-  stocksState stocks
+import Data.Fixed( Milli )
 
 -- -----------------------------------------------------------------------------
-main :: IO ()
-main = do
-  _ <- installHandler sigINT (CatchOnce exitSuccess) Nothing
-  forever $ do
-    -- print myReport using colors
-    runReport myReport True
-    -- wait 1 minute
-    sleep 60
+type StockSymbol = String
+
+-- -----------------------------------------------------------------------------
+type CashValue = Milli
 
 -- -----------------------------------------------------------------------------
