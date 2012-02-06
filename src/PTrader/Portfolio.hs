@@ -23,7 +23,8 @@ module PTrader.Portfolio(
   Portfolio, createNewPortfolio, runPortfolio,
   -- * Portfolio Update/Query functions
   insertBuyTransaction, insertSellTransaction, insertProfit,
-  calcStockAmount, calcStockNet, ownedStocks, calcStockProfit
+  calcStockAmount, calcStockNet, ownedStocks, calcStockProfit, calcStockPrice,
+  logBuy, logSell
   )where
 
 -- -----------------------------------------------------------------------------
@@ -39,6 +40,7 @@ import Database.SQLite(
   execParamStatement, execParamStatement_ )
 import System.Directory( copyFile )
 import PTrader.Types( StockSymbol, CashValue )
+import PTrader.Util( currentDay )
 import Paths_ptrader( getDataFileName )
 
 -- -----------------------------------------------------------------------------
@@ -176,6 +178,20 @@ insertSellTransaction day symbol amount price total = do
       sql = "INSERT INTO sell VALUES (NULL,:stockid,:date,:amount,:price,:total)"
 
 -- -----------------------------------------------------------------------------
+insertProfit :: Day -> StockSymbol -> ProfitType -> CashValue -> Portfolio Bool
+insertProfit day symbol ptype total = do
+  stockRet <- getStockID symbol
+  case stockRet of
+    Nothing -> return False
+    Just (StockID idx) -> execPFParamStatement_ sql
+                          [(":stockid", Int $ fromIntegral idx)
+                          ,(":date", Text $ showGregorian day)
+                          ,(":type", Int . fromIntegral . fromEnum $ ptype )
+                          ,(":total", cashToValue total)]
+    where
+      sql = "INSERT INTO profit VALUES (NULL,:stockid,:date,:type,:total)"
+
+-- -----------------------------------------------------------------------------
 calcStockAmount :: StockSymbol -> Portfolio Int
 calcStockAmount symbol = 
   getStockID symbol 
@@ -210,9 +226,13 @@ calcStockNet :: StockSymbol -> Portfolio CashValue
 calcStockNet symbol =
   getStockID symbol
   >>= maybe (return 0) (\idx -> do
-                           bought <- calcTotalBought idx
-                           sold <- calcTotalSold idx
-                           return (bought - sold))
+                           n <- calcStockAmount symbol
+                           if n <= 0
+                             then return 0
+                             else do
+                               bought <- calcTotalBought idx
+                               sold <- calcTotalSold idx
+                               return (bought - sold))
 
 -- -----------------------------------------------------------------------------
 calcTotalBought :: StockID -> Portfolio CashValue
@@ -249,6 +269,17 @@ calcStockProfit symbol =
       sql  = "SELECT SUM(total) FROM profit WHERE stockid=:par"
 
 -- -----------------------------------------------------------------------------
+calcStockPrice :: StockSymbol -> Portfolio CashValue
+calcStockPrice symbol = do
+  n <- calcStockAmount symbol
+  if n == 0
+    then return 0
+    else do
+      amount <- calcStockAmount symbol
+      net <- calcStockNet symbol
+      return (net / fromIntegral amount)
+
+-- -----------------------------------------------------------------------------
 ownedStocks :: Portfolio [(StockSymbol, Int)]
 ownedStocks = do
   resBuys <- execPFStatement sqlBuys :: Portfolio (Either String [[Row Value]])
@@ -274,17 +305,25 @@ ownedStocks = do
         return (stockid, amount)
 
 -- -----------------------------------------------------------------------------
-insertProfit :: Day -> StockSymbol -> ProfitType -> CashValue -> Portfolio Bool
-insertProfit day symbol ptype total = do
-  stockRet <- getStockID symbol
-  case stockRet of
-    Nothing -> return False
-    Just (StockID idx) -> execPFParamStatement_ sql
-                          [(":stockid", Int $ fromIntegral idx)
-                          ,(":date", Text $ showGregorian day)
-                          ,(":type", Int . fromIntegral . fromEnum $ ptype )
-                          ,(":total", cashToValue total)]
-    where
-      sql = "INSERT INTO profit VALUES (NULL,:stockid,:date,:type,:total)"
+logBuy :: StockSymbol -> Int -> CashValue -> CashValue -> Portfolio Bool
+logBuy symbol amount price total = do
+  day <- currentDay
+  insertBuyTransaction day symbol amount price total
+
+-- -----------------------------------------------------------------------------
+logSell :: StockSymbol -> Int -> CashValue -> CashValue -> Portfolio Bool
+logSell symbol amount price total = do
+  n <- calcStockAmount symbol
+  if n < amount
+    then return False
+    else do
+      day <- currentDay
+      oldPrice <- calcStockPrice symbol
+      ok <- insertSellTransaction day symbol amount price total
+      if ok
+        then let newPrice = (total / fromIntegral amount)
+                 profit = (newPrice - oldPrice) * fromIntegral amount
+             in insertProfit day symbol StockSell profit
+        else return False
 
 -- -----------------------------------------------------------------------------
