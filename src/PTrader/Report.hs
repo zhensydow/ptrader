@@ -183,21 +183,21 @@ outStockProfit (amount, spent, vals) = do
         when (length name <8) $ outStr "\t"
         when (length name <16) $ outStr "\t"
         clearColor
-      price = ((fromRational . toRational) (read (vals !! 1)::Double)) :: CashValue
+      price = (fromRational . toRational) (read (vals !! 1)::Double) :: CashValue
       value = price * fromIntegral amount
       profit = value - spent
       percent = (value * 100) / spent
       outValue = do
-        outStr $ (show value ) ++ "\t"
+        outStr $ show value ++ "\t"
         when (value < 1000) $ outStr "\t"
       outSpent = do
-        outStr $ (show spent) ++ "\t"
+        outStr $ show spent ++ "\t"
         when (spent < 1000) $ outStr "\t"        
       outProfit = do
         if profit < 0
           then setForegroundColor Vivid Red
           else setForegroundColor Vivid Green
-        outStr $ (show profit) ++ " (" ++ show percent ++ "%)"
+        outStr $ show profit ++ " (" ++ show percent ++ "%)"
         clearColor
 
 -- -----------------------------------------------------------------------------

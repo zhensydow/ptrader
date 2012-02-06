@@ -80,7 +80,7 @@ getValue stock val = do
   (_,buf) <- curlGetString url [CurlFollowLocation True]
   return . head . cleanLine . head . lines $ buf
     where                     
-      url = yahooUrl ++ "?s=" ++ stock ++ "&f=" ++ (yahooTag val)
+      url = yahooUrl ++ "?s=" ++ stock ++ "&f=" ++ yahooTag val
 
 -- -----------------------------------------------------------------------------
 getValues :: String -> [StockValue] -> IO [String]
@@ -98,7 +98,7 @@ getMulValue stocks val = do
   return . map (head . cleanLine) . lines $ buf
     where                     
       names = intercalate "+" stocks
-      url = yahooUrl ++ "?s=" ++ names ++ "&f=" ++ (yahooTag val)
+      url = yahooUrl ++ "?s=" ++ names ++ "&f=" ++ yahooTag val
 
 -- -----------------------------------------------------------------------------
 getMulValues :: [String] -> [StockValue] -> IO [[String]]
