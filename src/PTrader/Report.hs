@@ -104,6 +104,7 @@ outStockState vals = do
   outName
   outStr ((vals !! 1) ++ "\t")
   outChange
+  clearColor
   forM_ (drop 3 vals) (outStr . (++ "\t"))
   newLine
     
@@ -160,15 +161,15 @@ outIndexState vals = do
 stocksProfit :: [((StockSymbol,Int),CashValue)] -> Report ()
 stocksProfit stocks = do
   setForegroundColor Vivid Black
-  outStrLn "Name\t\t\tAmount\tValue\t\tSpent\t\tProfit"
+  outStrLn "Name\tAmount\tValue\t\tSpent\t\tProfit"
   clearColor
   dat <- io $ getMulValues (fmap (fst.fst) stocks) stockVals
-  forM_ (zip3 (fmap (snd.fst) stocks) (fmap snd stocks) dat) outStockProfit 
+  forM_ (zip3 (fmap fst stocks) (fmap snd stocks) dat) outStockProfit 
     where
-      stockVals = [StockName, Bid]
+      stockVals = [Bid]
   
-outStockProfit :: (Int,CashValue,[String]) -> Report ()
-outStockProfit (amount, spent, vals) = do
+outStockProfit :: ((StockSymbol,Int),CashValue,[String]) -> Report ()
+outStockProfit ((name,amount), spent, vals) = do
   outName
   outStr $ show amount ++ "\t"
   outValue
@@ -176,14 +177,11 @@ outStockProfit (amount, spent, vals) = do
   outProfit
   newLine
     where
-      name = read (head vals) :: String
       outName = do
         setForegroundColor Dull Blue
         outStr (name ++ "\t")
-        when (length name <8) $ outStr "\t"
-        when (length name <16) $ outStr "\t"
         clearColor
-      price = (fromRational . toRational) (read (vals !! 1)::Double) :: CashValue
+      price = (fromRational . toRational) (read (head vals)::Double) :: CashValue
       value = price * fromIntegral amount
       profit = value - spent
       percent = (value * 100) / spent
