@@ -18,12 +18,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module PTrader.Portfolio(
   -- * Types
-  CashValue, ProfitType,
+  CashValue, ProfitType(..),
   -- * Portfolio Monad
   Portfolio, createNewPortfolio, runPortfolio,
   -- * Portfolio Update/Query functions
   insertBuyTransaction, insertSellTransaction, insertProfit,
-  calcStockAmount, calcStockNet, ownedStocks
+  calcStockAmount, calcStockNet, ownedStocks, calcStockProfit
   )where
 
 -- -----------------------------------------------------------------------------
@@ -45,16 +45,18 @@ import Paths_ptrader( getDataFileName )
 newtype StockID = StockID Int
                 deriving( Show )
 
-data ProfitType = Dividend | CapitalIncrease | Other
+data ProfitType = Dividend | CapitalIncrease | Other | StockSell
                 deriving( Show )
 
 instance Enum ProfitType where
   fromEnum Dividend = 0
   fromEnum CapitalIncrease = 1
   fromEnum Other = 2
+  fromEnum StockSell = 3
   toEnum 0 = Dividend
   toEnum 1 = CapitalIncrease
   toEnum 2 = Other
+  toEnum 3 = StockSell
   toEnum _ = error "invalid ProfitType"
                         
 -- -----------------------------------------------------------------------------
