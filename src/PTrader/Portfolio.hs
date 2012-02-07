@@ -21,10 +21,12 @@ module PTrader.Portfolio(
   CashValue, ProfitType(..),
   -- * Portfolio Monad
   Portfolio, createNewPortfolio, runPortfolio,
-  -- * Portfolio Update/Query functions
+  -- * Portfolio Insert/Update functions
   insertBuyTransaction, insertSellTransaction, insertProfit, insertWatch,
-  insertHold, calcStockAmount, calcStockNet, ownedStocks, calcStockProfit,
-  calcStockPrice, watchedStocks, logBuy, logSell, logHold
+  insertHold, logBuy, logSell, logMarketHold, logPortfolioHold, updateHold,
+  -- * Portfolio queries
+  calcStockAmount, calcStockNet, ownedStocks, calcStockProfit,
+  calcStockPrice, watchedStocks, holds
   )where
 
 -- -----------------------------------------------------------------------------
@@ -222,9 +224,20 @@ insertHold day symbol price = do
       sql = "INSERT INTO hold VALUES (NULL,:stockid,:date,:price)"
 
 -- -----------------------------------------------------------------------------
+deleteHolds :: StockSymbol -> Portfolio Bool
+deleteHolds symbol = do
+  stockRet <- getStockID symbol
+  case stockRet of
+    Nothing -> return False
+    Just (StockID idx) -> execPFParamStatement_ sql
+                          [(":stockid", Int $ fromIntegral idx)]
+    where
+      sql = "DELETE FROM hold WHERE stockid=:stockid"
+
+-- -----------------------------------------------------------------------------
 calcStockAmount :: StockSymbol -> Portfolio Int
-calcStockAmount symbol = 
-  getStockID symbol 
+calcStockAmount symbol =
+  getStockID symbol
   >>= maybe (return 0) (\idx -> do
                            bought <- calcBoughtStocks idx
                            sold <- calcSoldStocks idx
@@ -317,7 +330,7 @@ ownedStocks = do
     Right [rows] -> liftM catMaybes $ forM rows $ \row ->
       case extractData row of
         Just (idx, Int v) -> getStockSymbol idx
-                             >>= maybe 
+                             >>= maybe
                              (return Nothing)
                              (\name -> do
                                  sell <- calcSoldStocks idx
@@ -337,18 +350,43 @@ ownedStocks = do
 -- -----------------------------------------------------------------------------
 watchedStocks :: Portfolio [StockSymbol]
 watchedStocks = do
-  res <- execPFStatement sql :: Portfolio (Either String [[Row Value]])  
+  res <- execPFStatement sql :: Portfolio (Either String [[Row Value]])
   case res of
-    Right [rows] -> liftM catMaybes $ forM rows $       
+    Right [rows] -> liftM catMaybes $ forM rows $
                     maybe (return Nothing) getStockSymbol . extractData
     _ -> return []
-    
+
     where
       sql = "SELECT stockid FROM watch"
       extractData row = case lookup "stockid" row of
           Just (Int x) -> return . intToStockID $ x
           _ -> Nothing
-  
+
+-- -----------------------------------------------------------------------------
+holds :: Portfolio [(StockSymbol, Day, CashValue)]
+holds = do
+ res <- execPFStatement sql :: Portfolio (Either String [[Row Value]])
+ case res of
+   Right [rows] -> liftM catMaybes $ forM rows $ \row ->
+     case extractData row of
+       Just (idx, Text s, Int v) ->
+         getStockSymbol idx
+         >>= maybe
+         (return Nothing)
+         (\name -> return . Just $ (name, strToDay s, intToCash v))
+       _ -> return Nothing
+   _ -> return []
+
+   where
+     sql = "SELECT stockid, date, price FROM hold"
+     extractData row = do
+       stockid <- case lookup "stockid" row of
+         Just (Int x) -> return . intToStockID $ x
+         _ -> Nothing
+       date <- lookup "date" row
+       price <- lookup "price" row
+       return (stockid, date, price)
+
 -- -----------------------------------------------------------------------------
 logBuy :: StockSymbol -> Int -> CashValue -> CashValue -> Portfolio Bool
 logBuy symbol amount price total = do
@@ -372,11 +410,24 @@ logSell symbol amount price total = do
         else return False
 
 -- -----------------------------------------------------------------------------
-logHold :: StockSymbol -> Portfolio Bool
-logHold symbol = do
+logMarketHold :: StockSymbol -> Portfolio Bool
+logMarketHold symbol = do
   day <- currentDay
   valStr <- io $ getValue symbol Bid
   let val = (fromRational . toRational) (read valStr :: Double)
-  insertHold day symbol val 
-  
+  insertHold day symbol val
+
+-- -----------------------------------------------------------------------------
+logPortfolioHold :: StockSymbol -> Portfolio Bool
+logPortfolioHold symbol = do
+  day <- currentDay
+  val <- calcStockPrice symbol
+  insertHold day symbol val
+
+-- -----------------------------------------------------------------------------
+updateHold :: StockSymbol -> (StockSymbol -> Portfolio Bool) -> Portfolio Bool
+updateHold symbol f = do
+  ok <- deleteHolds symbol
+  if ok then f symbol else return False
+
 -- -----------------------------------------------------------------------------
