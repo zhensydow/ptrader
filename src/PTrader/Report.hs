@@ -120,7 +120,7 @@ outStockState vals = do
     where
       name = read (head vals) :: String
       outName = do
-        setForegroundColor Dull Blue
+        setForegroundColor Vivid Blue
         outStr (name ++ "\t")
         when (length name <8) $ outStr "\t"
         when (length name <16) $ outStr "\t"
@@ -153,7 +153,7 @@ outIndexState vals = do
     where
       name = read (head vals) :: String
       outName = do
-        setForegroundColor Dull Blue
+        setForegroundColor Vivid Blue
         outStr (name ++ "\t")
         when (length name <8) $ outStr "\t"
         clearColor
@@ -173,7 +173,7 @@ stocksProfit stocks = do
   outStrLn "Name\tAmount\tValue\t\tSpent\t\tProfit"
   clearColor
   dat <- io $ getMulValues (fmap (fst.fst) stocks) stockVals
-  forM_ (zip3 (fmap fst stocks) (fmap snd stocks) dat) outStockProfit 
+  forM_ (zip3 (fmap fst stocks) (fmap snd stocks) dat) outStockProfit
     where
       stockVals = [Bid]
 
@@ -187,19 +187,19 @@ outStockProfit ((name,amount), spent, vals) = do
   newLine
     where
       outName = do
-        setForegroundColor Dull Blue
+        setForegroundColor Vivid Blue
         outStr (name ++ "\t")
         clearColor
       price = (fromRational . toRational) (read (head vals)::Double) :: CashValue
       value = price * fromIntegral amount
       profit = value - spent
-      percent = (value * 100) / spent
+      percent = (profit * 100) / spent
       outValue = do
         outStr $ show value ++ "\t"
         when (value < 1000) $ outStr "\t"
       outSpent = do
         outStr $ show spent ++ "\t"
-        when (spent < 1000) $ outStr "\t"        
+        when (spent < 1000) $ outStr "\t"
       outProfit = do
         if profit < 0
           then setForegroundColor Vivid Red
