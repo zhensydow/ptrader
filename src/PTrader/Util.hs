@@ -15,15 +15,23 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
-module PTrader.Util( currentDay ) where
+module PTrader.Util( currentDay, timeStamp ) where
 
 -- -----------------------------------------------------------------------------
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Data.Time.Calendar( Day )
-import Data.Time.Clock( utctDay, getCurrentTime )
+import Data.Time.Clock( UTCTime(..), getCurrentTime )
+import Data.Time.Format( formatTime )
+import System.Locale( defaultTimeLocale )
 
 -- -----------------------------------------------------------------------------
 currentDay :: MonadIO m => m Day
 currentDay = liftIO $ fmap utctDay getCurrentTime
+
+-- -----------------------------------------------------------------------------
+timeStamp :: MonadIO m => m String
+timeStamp = liftIO $ fmap showf getCurrentTime
+  where
+    showf = formatTime defaultTimeLocale "%F %X"
 
 -- -----------------------------------------------------------------------------
