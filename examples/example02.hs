@@ -21,9 +21,11 @@ import Control.Monad.IO.Class( liftIO )
 import System.Exit( exitSuccess )
 import System.Posix.Unistd( sleep )
 import System.Posix.Signals( Handler(..), installHandler, sigINT )
-import PTrader.Report( 
-  Report, runReport, newLine, newScreen, stocksState, indexState, stocksProfit )
+import PTrader.Report(
+  Report, runReport, newLine, newScreen, outStrLn,
+  stocksState, indexState, stocksProfit )
 import PTrader.Portfolio( runPortfolio, ownedStocks, calcStockNet )
+import PTrader.Util( timeStamp )
 
 -- -----------------------------------------------------------------------------
 indexes :: [String]
@@ -36,15 +38,13 @@ myReport filename = do
   newScreen
   -- print the state of indexes
   indexState indexes
-  newLine
   -- print the state of selected stocks
   stocksState (fmap fst stocks)
-  
-  spents <- runPortfolio (forM (map fst stocks) calcStockNet) filename
-
-  newLine
   -- print teoric profit
+  spents <- runPortfolio (forM (map fst stocks) calcStockNet) filename
   stocksProfit (zip stocks spents)
+  newLine
+  timeStamp >>= outStrLn
 
 -- -----------------------------------------------------------------------------
 mainLoop :: String -> IO ()
