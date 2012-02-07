@@ -16,20 +16,24 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module PTrader.Report( 
+module PTrader.Report(
   -- * Report Monad
   Report, runReport,
+  -- * Report functions
+  clearColor, newScreen, newLine, outStrLn, outStr, setBackgroundColor,
+  setForegroundColor,
   -- * Pre-defined Reports
-  clearColor, newScreen, newLine, stocksState, indexState, stocksProfit
+  stocksState, indexState, stocksProfit
   ) where
 
 -- -----------------------------------------------------------------------------
 import Control.Monad( when, forM_ )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
-import System.Console.ANSI( 
-  SGR(..), ConsoleLayer(..), Color(..), ColorIntensity(..), 
-  setSGR, clearScreen, setCursorPosition )
+import Control.Monad.State( MonadState, StateT, runStateT, modify )
+import System.Console.ANSI(
+  SGR(..), ConsoleLayer(..), Color(..), ColorIntensity(..),
+  setSGRCode, clearScreenCode, setCursorPositionCode )
 import PTrader.Query( StockValue(..), getMulValues )
 import PTrader.Types( StockSymbol, CashValue )
 
@@ -37,13 +41,18 @@ import PTrader.Types( StockSymbol, CashValue )
 data ReportConfig = ReportConfig { reportInColor :: ! Bool }
 
 -- -----------------------------------------------------------------------------
-newtype Report a = Report 
-                   { runR :: ReaderT ReportConfig IO a }
-                   deriving( Functor, Monad, MonadIO, MonadReader ReportConfig )
-                   
+newtype Report a = Report
+                   { runR :: StateT [String] (ReaderT ReportConfig IO) a }
+                   deriving( Functor, Monad, MonadIO, MonadReader ReportConfig
+                           , MonadState [String])
+
 -- -----------------------------------------------------------------------------
 runReport :: MonadIO m => Report a -> Bool -> m a
-runReport report = liftIO . runReaderT (runR report) . ReportConfig
+runReport report color = do
+  let config = ReportConfig color
+  (ret, out) <- liftIO $ runReaderT (runStateT (runR report) []) config
+  liftIO . putStrLn . concat . reverse $ out
+  return ret
 
 -- -----------------------------------------------------------------------------
 io :: IO a -> Report a
@@ -52,41 +61,41 @@ io = liftIO
 -- -----------------------------------------------------------------------------
 hasColor :: Report Bool
 hasColor = fmap reportInColor ask
-  
+
 -- -----------------------------------------------------------------------------
 setBackgroundColor :: ColorIntensity -> Color -> Report ()
 setBackgroundColor i c = do
   color <- hasColor
-  when color 
-    (io $ setSGR [SetColor Background i c])
+  when color
+    (modify (setSGRCode [SetColor Background i c] :))
 
 -- -----------------------------------------------------------------------------
 setForegroundColor :: ColorIntensity -> Color -> Report ()
 setForegroundColor i c = do
   color <- hasColor
-  when color 
-    (io $ setSGR [SetColor Foreground i c])
+  when color
+    (modify (setSGRCode [SetColor Foreground i c] :))
 
 -- -----------------------------------------------------------------------------
 clearColor :: Report ()
 clearColor = do
   setBackgroundColor Dull Black
   setForegroundColor Vivid White
-  
+
 -- -----------------------------------------------------------------------------
 newScreen :: Report ()
-newScreen = io clearScreen >> io (setCursorPosition 0 0)
-  
+newScreen = modify ((clearScreenCode++(setCursorPositionCode 0 0)):)
+
 -- -----------------------------------------------------------------------------
 outStrLn :: String -> Report ()
-outStrLn = io . putStrLn
+outStrLn msg = modify ((msg++"\n") :)
 
 outStr :: String -> Report ()
-outStr = io . putStr
+outStr msg = modify (msg :)
 
 -- -----------------------------------------------------------------------------
 newLine :: Report ()
-newLine = outStrLn ""
+newLine = modify ("\n" :)
 
 -- -----------------------------------------------------------------------------
 stocksState :: [StockSymbol] -> Report ()
@@ -96,9 +105,9 @@ stocksState stocks = do
   clearColor
   dat <- io $ getMulValues stocks stockVals
   forM_ dat outStockState
-    where 
+    where
       stockVals = [StockName, Ask, PercentChange, Open, DayLow, DayHigh]
-  
+
 outStockState :: [String] -> Report ()
 outStockState vals = do
   outName
@@ -107,7 +116,7 @@ outStockState vals = do
   clearColor
   forM_ (drop 3 vals) (outStr . (++ "\t"))
   newLine
-    
+
     where
       name = read (head vals) :: String
       outName = do
@@ -116,7 +125,7 @@ outStockState vals = do
         when (length name <8) $ outStr "\t"
         when (length name <16) $ outStr "\t"
         clearColor
-               
+
       change = read (vals !! 2) :: String
       outChange = do
         if head change == '-'
@@ -156,7 +165,7 @@ outIndexState vals = do
           else setForegroundColor Vivid Green
         outStr (change ++ "\t")
         clearColor
-  
+
 -- -----------------------------------------------------------------------------
 stocksProfit :: [((StockSymbol,Int),CashValue)] -> Report ()
 stocksProfit stocks = do
@@ -167,7 +176,7 @@ stocksProfit stocks = do
   forM_ (zip3 (fmap fst stocks) (fmap snd stocks) dat) outStockProfit 
     where
       stockVals = [Bid]
-  
+
 outStockProfit :: ((StockSymbol,Int),CashValue,[String]) -> Report ()
 outStockProfit ((name,amount), spent, vals) = do
   outName
