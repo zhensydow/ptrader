@@ -23,7 +23,7 @@ module PTrader.Report(
   clearColor, newScreen, newLine, outStrLn, outStr, setBackgroundColor,
   setForegroundColor,
   -- * Pre-defined Reports
-  stocksState, indexState, stocksProfit
+  stocksState, indexState, stocksProfit, showHolds
   ) where
 
 -- -----------------------------------------------------------------------------
@@ -31,10 +31,11 @@ import Control.Monad( when, forM_ )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
 import Control.Monad.State( MonadState, StateT, runStateT, modify )
+import Data.Time.Calendar( Day )
 import System.Console.ANSI(
   SGR(..), ConsoleLayer(..), Color(..), ColorIntensity(..),
   setSGRCode, clearScreenCode, setCursorPositionCode )
-import PTrader.Query( StockValue(..), getMulValues )
+import PTrader.Query( StockValue(..), getMulValues, getMulValue )
 import PTrader.Types( StockSymbol, CashValue )
 
 -- -----------------------------------------------------------------------------
@@ -172,13 +173,11 @@ stocksProfit stocks = do
   setForegroundColor Vivid Black
   outStrLn "Name\tAmount\tValue\t\tSpent\t\tProfit"
   clearColor
-  dat <- io $ getMulValues (fmap (fst.fst) stocks) stockVals
+  dat <- io $ getMulValue (fmap (fst.fst) stocks) Bid
   forM_ (zip3 (fmap fst stocks) (fmap snd stocks) dat) outStockProfit
-    where
-      stockVals = [Bid]
 
-outStockProfit :: ((StockSymbol,Int),CashValue,[String]) -> Report ()
-outStockProfit ((name,amount), spent, vals) = do
+outStockProfit :: ((StockSymbol,Int),CashValue,String) -> Report ()
+outStockProfit ((name,amount), spent, val) = do
   outName
   outStr $ show amount ++ "\t"
   outValue
@@ -190,7 +189,7 @@ outStockProfit ((name,amount), spent, vals) = do
         setForegroundColor Vivid Blue
         outStr (name ++ "\t")
         clearColor
-      price = (fromRational . toRational) (read (head vals)::Double) :: CashValue
+      price = (fromRational . toRational) (read val::Double) :: CashValue
       value = price * fromIntegral amount
       profit = value - spent
       percent = (profit * 100) / spent
@@ -207,4 +206,53 @@ outStockProfit ((name,amount), spent, vals) = do
         outStr $ show profit ++ " (" ++ show percent ++ "%)"
         clearColor
 
+-- -----------------------------------------------------------------------------
+showHolds :: [(StockSymbol,Day,CashValue,CashValue)] -> Report ()
+showHolds xs = do
+  setForegroundColor Vivid Black
+  outStrLn "Name\tPrice\tChange\tH.Price\tChange\tM.Price\tChange"
+  clearColor
+  dat <- io $ getMulValues (fmap (\(a,_,_,_)->a) xs) [Bid,PercentChange]
+  forM_ (zip xs dat) outStockHold
+  
+outStockHold :: ((StockSymbol,Day,CashValue,CashValue),[String]) -> Report ()
+outStockHold ((name,day,hPrice,mPrice),vals) = do
+  outName
+  outStr $ show price ++ "\t"
+  outChange
+  outStr $ show hPrice ++ "\t"
+  outHChange
+  outStr $ show mPrice ++ "\t"
+  outMChange
+  outStr $ show day
+  newLine
+    where
+      price = (fromRational . toRational) (read (head vals)::Double) :: CashValue
+      outName = do
+        setForegroundColor Vivid Blue
+        outStr (name ++ "\t")
+        clearColor
+      change = read (vals !! 1) :: String
+      outChange = do
+        if head change == '-'
+          then setForegroundColor Vivid Red
+          else setForegroundColor Vivid Green
+        outStr (change ++ "\t")
+        clearColor
+      hChange = ((price - hPrice)*100)/price
+      outHChange = do
+        if hChange < 0
+          then setForegroundColor Vivid Red
+          else setForegroundColor Vivid Green
+        outStr (show hChange ++ "%\t")
+        clearColor
+      mChange = ((price - mPrice)*100)/price
+      outMChange = do
+        if mChange < 0
+          then setForegroundColor Vivid Red
+          else setForegroundColor Vivid Green
+        outStr (show mChange ++ "%\t")
+        clearColor
+      
+  
 -- -----------------------------------------------------------------------------
