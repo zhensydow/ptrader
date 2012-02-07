@@ -31,8 +31,9 @@ module PTrader.Portfolio(
 import Control.Monad( when, forM, liftM )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
+import Data.List.Split( splitOn )
 import Data.Maybe( catMaybes )
-import Data.Time.Calendar( Day, showGregorian )
+import Data.Time.Calendar( Day, showGregorian, fromGregorian )
 import Data.Fixed( resolution )
 import Database.SQLite(
   SQLiteHandle, SQLiteResult, Row, Value(..),
@@ -61,7 +62,7 @@ instance Enum ProfitType where
   toEnum 2 = Other
   toEnum 3 = StockSell
   toEnum _ = error "invalid ProfitType"
-                        
+
 -- -----------------------------------------------------------------------------
 cashResolution :: Int
 cashResolution = fromIntegral $ resolution (undefined :: CashValue)
@@ -77,6 +78,10 @@ intToCash v = fromIntegral v / fromIntegral cashResolution
 intToStockID :: Integral a => a -> StockID
 intToStockID = StockID . fromIntegral
 
+strToDay :: String -> Day
+strToDay str = fromGregorian (read ys) (read ms) (read ds)
+  where
+    (ys:ms:ds:_) = splitOn "-" str
 -- -----------------------------------------------------------------------------
 data PortfolioConfig = PortfolioConfig { dbHandle :: SQLiteHandle }
 
@@ -202,7 +207,7 @@ insertWatch symbol = do
                           [(":stockid", Int $ fromIntegral idx)]
     where
       sql = "INSERT INTO watch VALUES (NULL,:stockid)"
-  
+
 -- -----------------------------------------------------------------------------
 insertHold :: Day -> StockSymbol -> CashValue -> Portfolio Bool
 insertHold day symbol price = do
