@@ -23,8 +23,9 @@ import System.Posix.Unistd( sleep )
 import System.Posix.Signals( Handler(..), installHandler, sigINT )
 import PTrader.Report(
   Report, runReport, newLine, newScreen, outStrLn,
-  stocksState, indexState, stocksProfit )
-import PTrader.Portfolio( runPortfolio, ownedStocks, calcStockNet )
+  stocksState, indexState, stocksProfit, showHolds )
+import PTrader.Portfolio( 
+  runPortfolio, ownedStocks, calcStockNet, calcStockPrice, holds )
 import PTrader.Util( timeStamp )
 
 -- -----------------------------------------------------------------------------
@@ -43,6 +44,11 @@ myReport filename = do
   -- print teoric profit
   spents <- runPortfolio (forM (map fst stocks) calcStockNet) filename
   stocksProfit (zip stocks spents)
+  xs <- runPortfolio holds filename
+  holds <- forM xs $ \(s,y,z) -> do
+    p <- runPortfolio (calcStockPrice s) filename
+    return (s,y,z,p)
+  showHolds holds
   newLine
   timeStamp >>= outStrLn
 
