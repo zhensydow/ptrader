@@ -25,6 +25,7 @@ Library
   Exposed-modules:     PTrader.Query
                        PTrader.Report
                        PTrader.Portfolio
+                       PTrader.Graph
                        PTrader.Types
                        PTrader.Util
   Other-modules:       Paths_ptrader
@@ -33,8 +34,10 @@ Library
                        transformers==0.2.*,
                        directory==1.1.*,
                        time==1.2.*,
+                       unix==2.4.*,
                        old-locale==1.0.*,
                        split==0.1.*,
+                       cairo==0.12.*,
                        curl==1.3.*,
                        ansi-terminal==0.5.*,
                        sqlite==0.5.*

@@ -15,7 +15,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
-module PTrader.Graph where
+module PTrader.Graph( GraphConfig(..), runGraph) where
 
 -- -----------------------------------------------------------------------------
 import Control.Monad( when )
@@ -23,6 +23,7 @@ import qualified Graphics.Rendering.Cairo as Cr
 import System.Posix.Unistd( sleep )
 
 -- -----------------------------------------------------------------------------
+render :: Cr.Render ()
 render = do
   Cr.setSourceRGBA 1 1 1 1
   Cr.rectangle 0 0 600 600
@@ -34,6 +35,7 @@ render = do
   Cr.stroke
   return ()
 
+test :: IO ()
 test = do
   Cr.withImageSurface Cr.FormatARGB32 300 300 $ \srf -> do
     Cr.renderWith srf render
@@ -54,7 +56,7 @@ graphLoop conf xs f = do
   x <- f
   let newxs = xs ++ [x]
   print newxs
-  sleep (graphSleep conf)
+  _ <- sleep (graphSleep conf)
   when notEnded    
     (graphLoop newConf newxs f)
     
