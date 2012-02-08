@@ -222,8 +222,11 @@ outStockHold ((name,day,hPrice,mPrice),vals) = do
   outChange
   outStr $ show hPrice ++ "\t"
   outHChange
-  outStr $ show mPrice ++ "\t"
-  outMChange
+  if (mPrice > 0) 
+    then do
+      outStr $ show mPrice ++ "\t"
+      outMChange
+    else outStr "\t\t"
   outStr $ show day
   newLine
     where
