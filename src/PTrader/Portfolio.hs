@@ -327,7 +327,7 @@ ownedStocks :: Portfolio [(StockSymbol, Int)]
 ownedStocks = do
   resBuys <- execPFStatement sqlBuys :: Portfolio (Either String [[Row Value]])
   case resBuys of
-    Right [rows] -> liftM catMaybes $ forM rows $ \row ->
+    Right [rows] -> liftM (filter ((>0).snd).catMaybes) $ forM rows $ \row ->
       case extractData row of
         Just (idx, Int v) -> getStockSymbol idx
                              >>= maybe
