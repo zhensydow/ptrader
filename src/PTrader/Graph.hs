@@ -18,28 +18,43 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 module PTrader.Graph( GraphConfig(..), runGraph) where
 
 -- -----------------------------------------------------------------------------
-import Control.Monad( when )
+import Control.Arrow( (***) )
+import Control.Monad( forM_, when )
+import Control.Monad.IO.Class( liftIO )
+import Data.List( transpose )
 import qualified Graphics.Rendering.Cairo as Cr
 import System.Posix.Unistd( sleep )
 
 -- -----------------------------------------------------------------------------
-render :: Cr.Render ()
-render = do
+render :: Double -> Double -> [[Double]] -> Cr.Render ()
+render w h xxs = do
   Cr.setSourceRGBA 1 1 1 1
-  Cr.rectangle 0 0 600 600
+  Cr.rectangle 0 0 w h
   Cr.fill
   Cr.setSourceRGBA 256 0 0 1
-  Cr.moveTo 300 20
-  Cr.lineTo 40 0
-  Cr.lineTo 0 40
-  Cr.stroke
-  return ()
+  forM_ rows (renderLine w h)
+    where
+      rows = fmap (zip [0..]) $ transpose xxs
 
-test :: IO ()
-test = do
-  Cr.withImageSurface Cr.FormatARGB32 300 300 $ \srf -> do
-    Cr.renderWith srf render
-    Cr.surfaceWriteToPNG srf "test.png"
+-- -----------------------------------------------------------------------------
+renderLine :: Double -> Double -> [(Double,Double)] -> Cr.Render ()
+renderLine _ _ [] = return ()
+renderLine w h (x:xs) = do 
+  let (miny, maxy) = yLimits $ map snd (x:xs)
+      maxx = fromIntegral $ max 5 ((length xs) - 1)
+      y:ys = map ((transx w maxx) *** (transy h miny maxy)) $ (x:xs)
+  liftIO $ print (y:ys)
+  Cr.moveTo (fst y) (snd y)
+  mapM_ (uncurry Cr.lineTo) ys
+  Cr.stroke
+
+-- -----------------------------------------------------------------------------
+transy :: Double -> Double -> Double -> Double -> Double
+transy l miny maxy y = l - (l * ((y - miny) / (maxy - miny)))
+
+-- -----------------------------------------------------------------------------
+transx :: Double -> Double -> Double -> Double
+transx l maxx y = l * (y / maxx)
 
 -- -----------------------------------------------------------------------------
 data GraphConfig = GraphConfig 
@@ -55,7 +70,9 @@ graphLoop :: GraphConfig -> [[Double]] -> IO [Double] -> IO ()
 graphLoop conf xs f = do
   x <- f
   let newxs = xs ++ [x]
-  print newxs
+  Cr.withImageSurface Cr.FormatARGB32 600 300 $ \srf -> do
+    Cr.renderWith srf (render 600 300 newxs)
+    Cr.surfaceWriteToPNG srf "test.png"
   _ <- sleep (graphSleep conf)
   when notEnded    
     (graphLoop newConf newxs f)
@@ -68,4 +85,11 @@ graphLoop conf xs f = do
         Nothing -> True
         Just n -> n > 0
         
+-- -----------------------------------------------------------------------------
+yLimits :: [Double] -> (Double, Double)
+yLimits xs = if abs (m1 - m2) < 1.0 then (m1, m1+1) else (m1, m2)
+  where
+    m1 = fromInteger . floor $ minimum xs
+    m2 = fromInteger . ceiling $ minimum xs
+    
 -- -----------------------------------------------------------------------------
