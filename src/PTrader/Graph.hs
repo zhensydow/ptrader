@@ -19,11 +19,10 @@ module PTrader.Graph( GraphConfig(..), runGraph) where
 
 -- -----------------------------------------------------------------------------
 import Control.Arrow( (***) )
+import Control.Concurrent( threadDelay )
 import Control.Monad( forM_, when )
-import Control.Monad.IO.Class( liftIO )
 import Data.List( transpose )
 import qualified Graphics.Rendering.Cairo as Cr
-import System.Posix.Unistd( sleep )
 
 -- -----------------------------------------------------------------------------
 render :: Double -> Double -> [[Double]] -> Cr.Render ()
@@ -41,9 +40,8 @@ renderLine :: Double -> Double -> [(Double,Double)] -> Cr.Render ()
 renderLine _ _ [] = return ()
 renderLine w h (x:xs) = do 
   let (miny, maxy) = yLimits $ map snd (x:xs)
-      maxx = fromIntegral $ max 5 ((length xs) - 1)
+      maxx = fromIntegral $ max 5 (length xs)
       y:ys = map ((transx w maxx) *** (transy h miny maxy)) $ (x:xs)
-  liftIO $ print (y:ys)
   Cr.moveTo (fst y) (snd y)
   mapM_ (uncurry Cr.lineTo) ys
   Cr.stroke
@@ -73,7 +71,7 @@ graphLoop conf xs f = do
   Cr.withImageSurface Cr.FormatARGB32 600 300 $ \srf -> do
     Cr.renderWith srf (render 600 300 newxs)
     Cr.surfaceWriteToPNG srf "test.png"
-  _ <- sleep (graphSleep conf)
+  _ <- threadDelay (graphSleep conf * 10^(6 :: Int))
   when notEnded    
     (graphLoop newConf newxs f)
     

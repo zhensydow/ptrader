@@ -34,7 +34,6 @@ Library
                        transformers==0.2.*,
                        directory==1.1.*,
                        time==1.2.*,
-                       unix==2.4.*,
                        old-locale==1.0.*,
                        split==0.1.*,
                        cairo==0.12.*,
