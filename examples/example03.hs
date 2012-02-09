@@ -19,11 +19,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 module Main where
 
 -- -----------------------------------------------------------------------------
-import Control.Concurrent( forkIO )
+import Control.Concurrent( ThreadId, forkIO, killThread, threadDelay )
 import Control.Monad( forM, forever )
-import Control.Monad.IO.Class( liftIO )
 import System.Exit( exitSuccess )
-import System.Posix.Unistd( sleep )
 import System.Posix.Signals( Handler(..), installHandler, sigINT )
 import PTrader.Report(
   Report, runReport, newLine, newScreen, outStrLn,
@@ -51,10 +49,10 @@ myReport filename = do
   spents <- runPortfolio (forM (map fst stocks) calcStockNet) filename
   stocksProfit (zip stocks spents)
   xs <- runPortfolio holds filename
-  holds <- forM xs $ \(s,y,z) -> do
+  hs <- forM xs $ \(s,y,z) -> do
     p <- runPortfolio (calcStockPrice s) filename
     return (s,y,z,p)
-  showHolds holds
+  showHolds hs
   newLine
   timeStamp >>= outStrLn
 
@@ -68,18 +66,21 @@ graphUpdate filename = do
   return vals
 
 -- -----------------------------------------------------------------------------
-graphThread filename = do
-  _ <- forkIO $ runGraph (GraphConfig (Just 3) 30) (graphUpdate filename)
-  return ()
+graphConfig :: GraphConfig
+graphConfig = GraphConfig Nothing 30
+
+graphThread :: String -> IO ThreadId
+graphThread filename = forkIO $ runGraph graphConfig (graphUpdate filename)
   
 -- -----------------------------------------------------------------------------
 mainLoop :: String -> IO ()
 mainLoop filename = do
-  _ <- installHandler sigINT (CatchOnce exitSuccess) Nothing
+  gtid <- graphThread filename
+  _ <- installHandler sigINT (CatchOnce (killThread gtid >> exitSuccess)) Nothing
   forever $ do
     -- print myReport using colors
     runReport (myReport filename) True
     -- wait 1 minute
-    sleep 60
+    threadDelay (60*10^(6 :: Int))
 
 -- -----------------------------------------------------------------------------
