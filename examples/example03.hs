@@ -58,10 +58,9 @@ myReport filename = do
   timeStamp >>= outStrLn
 
 -- -----------------------------------------------------------------------------
-graphUpdate :: String -> IO [Double]
-graphUpdate filename = do
-  stocks <- runPortfolio ownedStocks filename
-  vals <- forM (fmap fst stocks) $ \sym -> do
+graphUpdate :: [String] -> IO [Double]
+graphUpdate stocks = do
+  vals <- forM stocks $ \sym -> do
     val <- getValue sym Bid
     return $ read val
   return vals
@@ -71,8 +70,11 @@ graphConfig :: GraphConfig
 graphConfig = GraphConfig Nothing 30
 
 graphThread :: String -> IO ThreadId
-graphThread filename = forkIO $ runGraph graphConfig (graphUpdate filename)
-  
+graphThread filename = do
+  stocks <- fmap (fmap fst) $ runPortfolio ownedStocks filename
+  print stocks
+  forkIO $ runGraph graphConfig stocks (graphUpdate stocks filename)
+
 -- -----------------------------------------------------------------------------
 mainLoop :: String -> IO ()
 mainLoop filename = do
