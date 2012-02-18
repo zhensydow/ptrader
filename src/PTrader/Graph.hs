@@ -20,61 +20,107 @@ module PTrader.Graph( GraphConfig(..), runGraph) where
 -- -----------------------------------------------------------------------------
 import Control.Arrow( (***) )
 import Control.Concurrent( threadDelay )
-import Control.Monad( forM_, when )
+import Control.Monad( forM_, when, foldM_ )
 import Data.List( transpose )
 import qualified Graphics.Rendering.Cairo as Cr
 
 -- -----------------------------------------------------------------------------
-render :: Double -> Double -> [[Double]] -> Cr.Render ()
-render w h xxs = do
-  Cr.setSourceRGBA 1 1 1 1
+xborder :: Double
+xborder = 0.02
+
+-- -----------------------------------------------------------------------------
+data Color = Color !Double !Double !Double
+
+setColor :: Color -> Cr.Render()
+setColor (Color r g b) = Cr.setSourceRGB r g b
+
+-- -----------------------------------------------------------------------------
+styles :: [Color]
+styles = cycle [Color 1 0 0, Color 0 1 0, Color 0 0 1, Color 1 0 1]
+
+-- -----------------------------------------------------------------------------
+render :: Double -> Double -> [String] -> [[Double]] -> Cr.Render ()
+render w h names xxs = do
+  Cr.setSourceRGB 1 1 1
   Cr.rectangle 0 0 w h
   Cr.fill
-  Cr.setSourceRGBA 256 0 0 1
-  forM_ rows (renderLine w h)
+  forM_ (zip styles rows) (uncurry $ renderLine w h)
+  Cr.setLineCap Cr.LineCapSquare
+  Cr.setLineWidth 2
+  Cr.setSourceRGB 0 0 0
+  Cr.moveTo (xborder*w) (xborder*w)
+  Cr.lineTo (xborder*w) (h - 2*xborder*w)
+  Cr.lineTo (w - xborder*w) (h - 2*xborder*w)
+  Cr.lineTo (w - xborder*w) (xborder*w)
+  Cr.lineTo (xborder*w) (xborder*w)
+  Cr.stroke
+  foldM_ (renderLabel (h - 0.8*xborder*w)) (xborder*w) $ zip styles names
+
     where
       rows = fmap (zip [0..]) $ transpose xxs
 
 -- -----------------------------------------------------------------------------
-renderLine :: Double -> Double -> [(Double,Double)] -> Cr.Render ()
-renderLine _ _ [] = return ()
-renderLine w h (x:xs) = do 
+renderLabel :: Double -> Double -> (Color,String) -> Cr.Render Double
+renderLabel y x (col,label) = do
+  setColor col
+  Cr.moveTo x y
+  extents <- Cr.textExtents (' ':' ':label)
+  Cr.showText label
+  Cr.stroke
+  return $! x + (Cr.textExtentsXadvance extents)
+
+-- -----------------------------------------------------------------------------
+renderLine :: Double -> Double -> Color -> [(Double,Double)] -> Cr.Render ()
+renderLine _ _ _ [] = return ()
+renderLine w h col (x:xs) = do
   let (miny, maxy) = yLimits $ map snd (x:xs)
       maxx = fromIntegral $ max 5 (length xs)
-      y:ys = map ((transx w maxx) *** (transy h miny maxy)) $ (x:xs)
+      y:ys = map ((transx (xborder*w) w maxx) *** (transy (xborder*w) h miny maxy))
+             $ (x:xs)
+  setColor col
   Cr.moveTo (fst y) (snd y)
   mapM_ (uncurry Cr.lineTo) ys
+  Cr.setLineWidth 0.5
   Cr.stroke
 
 -- -----------------------------------------------------------------------------
-transy :: Double -> Double -> Double -> Double -> Double
-transy l miny maxy y = l - (l * ((y - miny) / (maxy - miny)))
+transy :: Double -> Double -> Double -> Double -> Double -> Double
+transy lo l miny maxy y = offset - (lcanvas * ((y - miny) / (maxy - miny)))
+  where
+    offset = l - 2*lo
+    lcanvas = l - 3*lo
 
 -- -----------------------------------------------------------------------------
-transx :: Double -> Double -> Double -> Double
-transx l maxx y = l * (y / maxx)
+transx :: Double -> Double -> Double -> Double -> Double
+transx lo l maxx y = lcanvas * (y / maxx) + lo
+  where
+    lcanvas = l - 2*lo
 
 -- -----------------------------------------------------------------------------
-data GraphConfig = GraphConfig 
-                   { graphIters :: Maybe Int 
+data GraphConfig = GraphConfig
+                   { graphIters :: Maybe Int
                    , graphSleep :: ! Int }
                  deriving( Show )
-                     
--- -----------------------------------------------------------------------------
-runGraph :: GraphConfig -> IO [Double] -> IO ()
-runGraph c f = graphLoop c [] f
 
-graphLoop :: GraphConfig -> [[Double]] -> IO [Double] -> IO ()
-graphLoop conf xs f = do
+-- -----------------------------------------------------------------------------
+genImage :: FilePath -> Int -> Int -> [String] -> [[Double]] -> IO ()
+genImage fn w h xs ys = Cr.withImageSurface Cr.FormatARGB32 w h $ \srf -> do
+    Cr.renderWith srf (render (fromIntegral w) (fromIntegral h) xs ys)
+    Cr.surfaceWriteToPNG srf fn
+
+-- -----------------------------------------------------------------------------
+runGraph :: GraphConfig -> [String] -> IO [Double] -> IO ()
+runGraph c names f = graphLoop c names [] f
+
+graphLoop :: GraphConfig -> [String] -> [[Double]] -> IO [Double] -> IO ()
+graphLoop conf names xs f = do
   x <- f
   let newxs = xs ++ [x]
-  Cr.withImageSurface Cr.FormatARGB32 600 300 $ \srf -> do
-    Cr.renderWith srf (render 600 300 newxs)
-    Cr.surfaceWriteToPNG srf "test.png"
+  genImage "test.png" 600 300 names  newxs
   _ <- threadDelay (graphSleep conf * 10^(6 :: Int))
-  when notEnded    
-    (graphLoop newConf newxs f)
-    
+  when notEnded
+    (graphLoop newConf names newxs f)
+
     where
       newConf = case graphIters conf of
         Nothing -> conf
