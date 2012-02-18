@@ -82,12 +82,12 @@ graphLoop conf xs f = do
       notEnded = case graphIters conf of
         Nothing -> True
         Just n -> n > 0
-        
+
 -- -----------------------------------------------------------------------------
 yLimits :: [Double] -> (Double, Double)
 yLimits xs = if abs (m1 - m2) < 1.0 then (m1, m1+1) else (m1, m2)
   where
     m1 = fromInteger . floor $ minimum xs
-    m2 = fromInteger . ceiling $ minimum xs
-    
+    m2 = fromInteger . ceiling $ maximum xs
+
 -- -----------------------------------------------------------------------------
