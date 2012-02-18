@@ -24,13 +24,14 @@ module PTrader.Portfolio(
   -- * Portfolio Insert/Update functions
   insertBuyTransaction, insertSellTransaction, insertProfit, insertWatch,
   insertHold, logBuy, logSell, logMarketHold, logPortfolioHold, updateHold,
+  insertStockSymbols, updateStocks,
   -- * Portfolio queries
   calcStockAmount, calcStockNet, ownedStocks, calcStockProfit,
   calcStockPrice, watchedStocks, holds
   )where
 
 -- -----------------------------------------------------------------------------
-import Control.Monad( when, forM, liftM )
+import Control.Monad( when, forM, forM_, liftM )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
 import Data.List.Split( splitOn )
@@ -44,7 +45,7 @@ import Database.SQLite(
   execParamStatement, execParamStatement_ )
 import System.Directory( copyFile )
 import PTrader.Types( StockSymbol, CashValue )
-import PTrader.Query( StockValue(Bid), getValue )
+import PTrader.Query( StockValue(..), getValue )
 import PTrader.Util( currentDay )
 import Paths_ptrader( getDataFileName )
 
@@ -90,7 +91,8 @@ data PortfolioConfig = PortfolioConfig { dbHandle :: SQLiteHandle }
 -- -----------------------------------------------------------------------------
 newtype Portfolio a = Portfolio
                       { runPF :: ReaderT PortfolioConfig IO a }
-                    deriving( Functor, Monad, MonadIO, MonadReader PortfolioConfig )
+                    deriving( Functor, Monad, MonadIO
+                            , MonadReader PortfolioConfig )
 
 -- -----------------------------------------------------------------------------
 createNewPortfolio :: FilePath -> IO ()
@@ -209,6 +211,19 @@ insertWatch symbol = do
                           [(":stockid", Int $ fromIntegral idx)]
     where
       sql = "INSERT INTO watch VALUES (NULL,:stockid)"
+
+-- -----------------------------------------------------------------------------
+insertStockSymbols :: [StockSymbol] -> Portfolio ()
+insertStockSymbols xs = do
+  forM_ xs $ \symbol -> do
+    stockRet <- getStockID symbol
+    case stockRet of
+      Nothing -> execPFParamStatement_ sql [(":par", Text symbol)]
+                 >> return ()
+      Just _ -> return ()
+
+    where
+      sql = "INSERT INTO stock VALUES (NULL,:par)"
 
 -- -----------------------------------------------------------------------------
 insertHold :: Day -> StockSymbol -> CashValue -> Portfolio Bool
@@ -429,5 +444,25 @@ updateHold :: StockSymbol -> (StockSymbol -> Portfolio Bool) -> Portfolio Bool
 updateHold symbol f = do
   ok <- deleteHolds symbol
   if ok then f symbol else return False
+
+-- -----------------------------------------------------------------------------
+updateStocks :: Portfolio Bool
+updateStocks = do
+  resSel <- execPFStatement sqlSel :: Portfolio (Either String [[Row Value]])
+  case resSel of
+    Right [stocks] -> mapM updateStock stocks >>= return . all id
+    _ -> return False
+
+    where
+     sqlSel = "SELECT symbol FROM stock"
+
+updateStock :: [(String, Value)] -> Portfolio Bool
+updateStock [("symbol", Text symbol)] = do
+  valStr <- io $ getValue symbol StockName
+  execPFParamStatement_ sql [(":sym",Text symbol), (":name",Text $ read valStr)]
+    where
+      sql = "UPDATE stock SET name=:name WHERE symbol=:sym"
+
+updateStock _ = return False
 
 -- -----------------------------------------------------------------------------
