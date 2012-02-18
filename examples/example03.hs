@@ -23,6 +23,7 @@ import Control.Concurrent( ThreadId, forkIO, killThread, threadDelay )
 import Control.Monad( forM, forever )
 import System.Exit( exitSuccess )
 import System.Posix.Signals( Handler(..), installHandler, sigINT )
+import System.Posix.Unistd( sleep )
 import PTrader.Report(
   Report, runReport, newLine, newScreen, outStrLn,
   stocksState, indexState, stocksProfit, showHolds )
@@ -81,6 +82,6 @@ mainLoop filename = do
     -- print myReport using colors
     runReport (myReport filename) True
     -- wait 1 minute
-    threadDelay (60*10^(6 :: Int))
+    sleep 60
 
 -- -----------------------------------------------------------------------------
