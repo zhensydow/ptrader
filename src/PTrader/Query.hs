@@ -69,6 +69,7 @@ yahooTag DividendExDate = "q"
 -- -----------------------------------------------------------------------------
 yahooUrl :: String
 yahooUrl = "http://finance.yahoo.com/d/quotes.csv"
+{-# INLINE yahooUrl #-}
 
 -- -----------------------------------------------------------------------------
 cleanLine :: String -> [String]
