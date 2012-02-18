@@ -1,1 +1,4 @@
 /dist/
+/examples/*.hi
+/examples/*.o
+/examples/*.png
