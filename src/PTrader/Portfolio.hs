@@ -34,9 +34,10 @@ import Control.Monad( when, forM, liftM )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
 import Data.List.Split( splitOn )
-import Data.Maybe( catMaybes )
+import Data.Maybe( fromJust, catMaybes )
 import Data.Time.Calendar( Day, showGregorian, fromGregorian )
 import Data.Fixed( resolution )
+import Data.Tuple( swap )
 import Database.SQLite(
   SQLiteHandle, SQLiteResult, Row, Value(..),
   openConnection, closeConnection, execStatement,
@@ -52,18 +53,17 @@ newtype StockID = StockID Int
                 deriving( Show )
 
 data ProfitType = Dividend | CapitalIncrease | Other | StockSell
-                deriving( Show )
+                deriving( Show, Eq )
 
 instance Enum ProfitType where
-  fromEnum Dividend = 0
-  fromEnum CapitalIncrease = 1
-  fromEnum Other = 2
-  fromEnum StockSell = 3
-  toEnum 0 = Dividend
-  toEnum 1 = CapitalIncrease
-  toEnum 2 = Other
-  toEnum 3 = StockSell
-  toEnum _ = error "invalid ProfitType"
+  fromEnum = fromJust . flip lookup profitTable
+  toEnum = fromJust . flip lookup (map swap profitTable)
+
+profitTable :: [(ProfitType, Int)]
+profitTable = [ (Dividend, 0)
+              , (CapitalIncrease, 1)
+              , (Other, 2)
+              , (StockSell, 3)]
 
 -- -----------------------------------------------------------------------------
 cashResolution :: Int
