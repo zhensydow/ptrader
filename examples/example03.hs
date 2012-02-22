@@ -30,7 +30,7 @@ import PTrader.Report(
 import PTrader.Portfolio(
   runPortfolio, ownedStocks, calcStockNet, calcStockPrice, holds )
 import PTrader.Graph( GraphConfig(..), runGraph )
-import PTrader.Query( StockValue(..), getValue )
+import PTrader.Query( StockValue(..), getValue, getMulValue )
 import PTrader.Util( timeStamp )
 
 -- -----------------------------------------------------------------------------
@@ -72,8 +72,8 @@ graphConfig = GraphConfig Nothing 30
 graphThread :: String -> IO ThreadId
 graphThread filename = do
   stocks <- fmap (fmap fst) $ runPortfolio ownedStocks filename
-  print stocks
-  forkIO $ runGraph graphConfig stocks (graphUpdate stocks filename)
+  refvals <- fmap (fmap read) $ getMulValue stocks PreviousClose
+  forkIO $ runGraph graphConfig stocks refvals (graphUpdate stocks)
 
 -- -----------------------------------------------------------------------------
 mainLoop :: String -> IO ()
