@@ -85,7 +85,7 @@ clearColor = do
 
 -- -----------------------------------------------------------------------------
 newScreen :: Report ()
-newScreen = modify ((clearScreenCode++(setCursorPositionCode 0 0)):)
+newScreen = modify ((clearScreenCode ++ setCursorPositionCode 0 0):)
 
 -- -----------------------------------------------------------------------------
 outStrLn :: String -> Report ()
@@ -222,7 +222,7 @@ outStockHold ((name,day,hPrice,mPrice),vals) = do
   outChange
   outStr $ show hPrice ++ "\t"
   outHChange
-  if (mPrice > 0) 
+  if mPrice > 0
     then do
       outStr $ show mPrice ++ "\t"
       outMChange
