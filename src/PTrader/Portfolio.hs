@@ -24,10 +24,11 @@ module PTrader.Portfolio(
   -- * Portfolio Insert/Update functions
   insertBuyTransaction, insertSellTransaction, insertProfit, insertWatch,
   insertHold, logBuy, logSell, logMarketHold, logPortfolioHold, updateHold,
-  insertStockSymbols, updateStocks,
+  insertStockSymbols, updateStocks, deleteHolds,
   -- * Portfolio queries
   calcStockAmount, calcStockNet, ownedStocks, calcStockProfit,
-  calcStockPrice, watchedStocks, holds
+  calcStockPrice, calcStockMarketValue, calcStockGrossProfit, 
+  calcStockNetProfit, watchedStocks, holds
   )where
 
 -- -----------------------------------------------------------------------------
@@ -85,6 +86,7 @@ strToDay :: String -> Day
 strToDay str = fromGregorian (read ys) (read ms) (read ds)
   where
     (ys:ms:ds:_) = splitOn "-" str
+
 -- -----------------------------------------------------------------------------
 data PortfolioConfig = PortfolioConfig { dbHandle :: SQLiteHandle }
 
@@ -214,13 +216,12 @@ insertWatch symbol = do
 
 -- -----------------------------------------------------------------------------
 insertStockSymbols :: [StockSymbol] -> Portfolio ()
-insertStockSymbols xs = do
-  forM_ xs $ \symbol -> do
-    stockRet <- getStockID symbol
-    case stockRet of
-      Nothing -> execPFParamStatement_ sql [(":par", Text symbol)]
-                 >> return ()
-      Just _ -> return ()
+insertStockSymbols xs = forM_ xs $ \symbol -> do
+  stockRet <- getStockID symbol
+  case stockRet of
+    Nothing -> execPFParamStatement_ sql [(":par", Text symbol)]
+               >> return ()
+    Just _ -> return ()
 
     where
       sql = "INSERT INTO stock VALUES (NULL,:par)"
@@ -327,15 +328,38 @@ calcStockProfit symbol =
       sql  = "SELECT SUM(total) FROM profit WHERE stockid=:par"
 
 -- -----------------------------------------------------------------------------
+calcStockGrossProfit :: StockSymbol -> Portfolio CashValue
+calcStockGrossProfit symbol = do
+  net <- calcStockNet symbol
+  value <- calcStockMarketValue symbol
+  return $! value - net
+
+calcStockNetProfit :: StockSymbol -> Portfolio CashValue
+calcStockNetProfit symbol = do
+  gross <- calcStockGrossProfit symbol
+  profit <- calcStockProfit symbol
+  return $! gross + profit
+
+-- -----------------------------------------------------------------------------
 calcStockPrice :: StockSymbol -> Portfolio CashValue
 calcStockPrice symbol = do
   n <- calcStockAmount symbol
   if n == 0
     then return 0
     else do
-      amount <- calcStockAmount symbol
       net <- calcStockNet symbol
-      return (net / fromIntegral amount)
+      return $! net / fromIntegral n
+
+-- -----------------------------------------------------------------------------
+calcStockMarketValue :: StockSymbol -> Portfolio CashValue
+calcStockMarketValue symbol = do
+  n <- calcStockAmount symbol
+  if n == 0
+    then return 0
+    else do
+      valStr <- io $ getValue symbol Bid
+      let val = (fromRational . toRational) (read valStr :: Double)
+      return $! val * fromIntegral n
 
 -- -----------------------------------------------------------------------------
 ownedStocks :: Portfolio [(StockSymbol, Int)]
@@ -450,7 +474,7 @@ updateStocks :: Portfolio Bool
 updateStocks = do
   resSel <- execPFStatement sqlSel :: Portfolio (Either String [[Row Value]])
   case resSel of
-    Right [stocks] -> mapM updateStock stocks >>= return . all id
+    Right [stocks] -> fmap and $ mapM updateStock stocks
     _ -> return False
 
     where
