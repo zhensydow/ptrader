@@ -100,6 +100,7 @@ newLine = modify ("\n" :)
 
 -- -----------------------------------------------------------------------------
 stocksState :: [StockSymbol] -> Report ()
+stocksState [] = return ()
 stocksState stocks = do
   setForegroundColor Vivid Black
   outStrLn "Name\t\t\tValue\tChange\tOpen\tMin\tMax"
@@ -136,6 +137,7 @@ outStockState vals = do
 
 -- -----------------------------------------------------------------------------
 indexState :: [StockSymbol] -> Report ()
+indexState [] = return ()
 indexState idx = do
   setForegroundColor Vivid Black
   outStrLn "Name\t\tChange\tOpen\tMin\tMax"
@@ -169,6 +171,7 @@ outIndexState vals = do
 
 -- -----------------------------------------------------------------------------
 stocksProfit :: [((StockSymbol,Int),CashValue)] -> Report ()
+stocksProfit [] = return ()
 stocksProfit stocks = do
   setForegroundColor Vivid Black
   outStrLn "Name\tAmount\tValue\t\tSpent\t\tProfit"
@@ -208,13 +211,14 @@ outStockProfit ((name,amount), spent, val) = do
 
 -- -----------------------------------------------------------------------------
 showHolds :: [(StockSymbol,Day,CashValue,CashValue)] -> Report ()
+showHolds [] = return ()
 showHolds xs = do
   setForegroundColor Vivid Black
   outStrLn "Name\tPrice\tChange\tH.Price\tChange\tM.Price\tChange"
   clearColor
   dat <- io $ getMulValues (fmap (\(a,_,_,_)->a) xs) [Bid,PercentChange]
   forM_ (zip xs dat) outStockHold
-  
+
 outStockHold :: ((StockSymbol,Day,CashValue,CashValue),[String]) -> Report ()
 outStockHold ((name,day,hPrice,mPrice),vals) = do
   outName
@@ -256,6 +260,5 @@ outStockHold ((name,day,hPrice,mPrice),vals) = do
           else setForegroundColor Vivid Green
         outStr (show mChange ++ "%\t")
         clearColor
-      
-  
+
 -- -----------------------------------------------------------------------------
