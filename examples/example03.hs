@@ -19,7 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 module Main where
 
 -- -----------------------------------------------------------------------------
-import Control.Concurrent( ThreadId, forkIO, killThread, threadDelay )
+import Control.Concurrent( ThreadId, forkIO, killThread )
 import Control.Monad( forM, forever )
 import System.Exit( exitSuccess )
 import System.Posix.Signals( Handler(..), installHandler, sigINT )
@@ -30,7 +30,7 @@ import PTrader.Report(
 import PTrader.Portfolio(
   runPortfolio, ownedStocks, calcStockNet, calcStockPrice, holds )
 import PTrader.Graph( GraphConfig(..), runGraph )
-import PTrader.Query( StockValue(..), getValue, getMulValue )
+import PTrader.Query( StockValue(..), getMulValue )
 import PTrader.Util( timeStamp )
 
 -- -----------------------------------------------------------------------------
@@ -59,11 +59,7 @@ myReport filename = do
 
 -- -----------------------------------------------------------------------------
 graphUpdate :: [String] -> IO [Double]
-graphUpdate stocks = do
-  vals <- forM stocks $ \sym -> do
-    val <- getValue sym Bid
-    return $ read val
-  return vals
+graphUpdate stocks = fmap (fmap read) $ getMulValue stocks Bid
 
 -- -----------------------------------------------------------------------------
 graphConfig :: GraphConfig
