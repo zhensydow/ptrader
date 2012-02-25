@@ -15,7 +15,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances, TypeSynonymInstances #-}
 module PTrader.Report(
   -- * Report Monad
   Report, runReport,
@@ -46,6 +46,22 @@ newtype Report a = Report
                    { runR :: StateT [String] (ReaderT ReportConfig IO) a }
                    deriving( Functor, Monad, MonadIO, MonadReader ReportConfig
                            , MonadState [String])
+
+-- -----------------------------------------------------------------------------
+class RedGreen a where
+  isRed :: a -> Bool
+  isGreen :: a -> Bool
+  isGreen = not . isRed
+
+instance RedGreen [Char] where
+  isRed [] = False
+  isRed (x:_) = x == '-'
+
+instance RedGreen CashValue where
+  isRed x = x < 0
+
+instance (Ord a) => RedGreen (a,a) where
+  isRed (base,value) = value < base
 
 -- -----------------------------------------------------------------------------
 runReport :: MonadIO m => Report a -> Bool -> m a
@@ -94,9 +110,30 @@ outStrLn msg = modify ((msg++"\n") :)
 outStr :: String -> Report ()
 outStr msg = modify (msg :)
 
+outTab :: Report ()
+outTab = outStr "\t"
+
 -- -----------------------------------------------------------------------------
 newLine :: Report ()
 newLine = modify ("\n" :)
+
+-- -----------------------------------------------------------------------------
+setRGColor :: RedGreen a => a -> Report ()
+setRGColor value = if isRed value
+                   then setForegroundColor Vivid Red
+                   else setForegroundColor Vivid Green
+
+-- -----------------------------------------------------------------------------
+outMainName :: String -> Int -> Report ()
+outMainName name tabs = do
+  setForegroundColor Vivid Blue
+  outStr name
+  when (tabs > 0) outTab
+  forM_ [2..tabs] $ \i -> when (length name < (i-1)*8) outTab
+  clearColor
+
+outRGString :: String -> Report ()
+outRGString val = setRGColor val >> outStr val >> outTab >> clearColor
 
 -- -----------------------------------------------------------------------------
 stocksState :: [StockSymbol] -> Report ()
@@ -111,29 +148,14 @@ stocksState stocks = do
       stockVals = [StockName, Ask, PercentChange, Open, DayLow, DayHigh]
 
 outStockState :: [String] -> Report ()
-outStockState vals = do
-  outName
-  outStr ((vals !! 1) ++ "\t")
-  outChange
-  clearColor
-  forM_ (drop 3 vals) (outStr . (++ "\t"))
-  newLine
-
-    where
-      name = read (head vals) :: String
-      outName = do
-        setForegroundColor Vivid Blue
-        outStr (name ++ "\t")
-        when (length name <8) $ outStr "\t"
-        when (length name <16) $ outStr "\t"
-        clearColor
-
-      change = read (vals !! 2) :: String
-      outChange = do
-        if head change == '-'
-          then setForegroundColor Vivid Red
-          else setForegroundColor Vivid Green
-        outStr (change ++ "\t")
+outStockState vals
+  | length vals < 3 = return ()
+  | otherwise = do
+    outMainName (read . head $ vals) 3
+    outStr (vals !! 1) >> outTab
+    outRGString $ read (vals !! 2)
+    forM_ (drop 3 vals) ((>>outTab) . outStr)
+    newLine
 
 -- -----------------------------------------------------------------------------
 indexState :: [StockSymbol] -> Report ()
@@ -148,26 +170,13 @@ indexState idx = do
       stockVals = [StockName, PercentChange, Open, DayLow, DayHigh]
 
 outIndexState :: [String] -> Report ()
-outIndexState vals = do
-  outName
-  outChange
-  forM_ (drop 2 vals) (outStr . (++"\t"))
-  newLine
-    where
-      name = read (head vals) :: String
-      outName = do
-        setForegroundColor Vivid Blue
-        outStr (name ++ "\t")
-        when (length name <8) $ outStr "\t"
-        clearColor
-
-      change = read (vals !! 1) :: String
-      outChange = do
-        if head change == '-'
-          then setForegroundColor Vivid Red
-          else setForegroundColor Vivid Green
-        outStr (change ++ "\t")
-        clearColor
+outIndexState vals
+  | length vals < 2 = return ()
+  | otherwise = do
+    outMainName (read . head $ vals) 2
+    outRGString $ read (vals !! 1)
+    forM_ (drop 2 vals) ((>>outTab) . outStr)
+    newLine
 
 -- -----------------------------------------------------------------------------
 stocksProfit :: [((StockSymbol,Int),CashValue)] -> Report ()
@@ -181,31 +190,27 @@ stocksProfit stocks = do
 
 outStockProfit :: ((StockSymbol,Int),CashValue,String) -> Report ()
 outStockProfit ((name,amount), spent, val) = do
-  outName
-  outStr $ show amount ++ "\t"
+  outMainName name 1
+  outStr (show amount) >> outTab
   outValue
   outSpent
   outProfit
   newLine
     where
-      outName = do
-        setForegroundColor Vivid Blue
-        outStr (name ++ "\t")
-        clearColor
       price = (fromRational . toRational) (read val::Double) :: CashValue
       value = price * fromIntegral amount
       profit = value - spent
       percent = (profit * 100) / spent
       outValue = do
-        outStr $ show value ++ "\t"
-        when (value < 1000) $ outStr "\t"
+        setRGColor (spent,value)
+        outStr (show value) >> outTab
+        clearColor
+        when (value < 1000) outTab
       outSpent = do
-        outStr $ show spent ++ "\t"
-        when (spent < 1000) $ outStr "\t"
+        outStr (show spent) >> outTab
+        when (spent < 1000) outTab
       outProfit = do
-        if profit < 0
-          then setForegroundColor Vivid Red
-          else setForegroundColor Vivid Green
+        setRGColor profit
         outStr $ show profit ++ " (" ++ show percent ++ "%)"
         clearColor
 
@@ -221,44 +226,25 @@ showHolds xs = do
 
 outStockHold :: ((StockSymbol,Day,CashValue,CashValue),[String]) -> Report ()
 outStockHold ((name,day,hPrice,mPrice),vals) = do
-  outName
-  outStr $ show price ++ "\t"
-  outChange
-  outStr $ show hPrice ++ "\t"
-  outHChange
+  outMainName name 1
+  outStr (show price) >> outTab
+  outRGString $ read (vals !! 1)
+  outStr (show hPrice) >> outTab
+  outPerChange hChange
   if mPrice > 0
     then do
-      outStr $ show mPrice ++ "\t"
-      outMChange
-    else outStr "\t\t"
+      outStr (show mPrice) >> outTab
+      outPerChange mChange
+    else outTab >> outTab
   outStr $ show day
   newLine
     where
       price = (fromRational . toRational) (read (head vals)::Double) :: CashValue
-      outName = do
-        setForegroundColor Vivid Blue
-        outStr (name ++ "\t")
-        clearColor
-      change = read (vals !! 1) :: String
-      outChange = do
-        if head change == '-'
-          then setForegroundColor Vivid Red
-          else setForegroundColor Vivid Green
-        outStr (change ++ "\t")
-        clearColor
       hChange = ((price - hPrice)*100)/price
-      outHChange = do
-        if hChange < 0
-          then setForegroundColor Vivid Red
-          else setForegroundColor Vivid Green
-        outStr (show hChange ++ "%\t")
-        clearColor
       mChange = ((price - mPrice)*100)/price
-      outMChange = do
-        if mChange < 0
-          then setForegroundColor Vivid Red
-          else setForegroundColor Vivid Green
-        outStr (show mChange ++ "%\t")
+      outPerChange val = do
+        setRGColor val
+        outStr (show val ++ "%") >> outTab
         clearColor
 
 -- -----------------------------------------------------------------------------
