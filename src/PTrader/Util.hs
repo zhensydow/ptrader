@@ -15,7 +15,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ----------------------------------------------------------------------------- -}
-module PTrader.Util( currentDay, timeStamp ) where
+module PTrader.Util( currentDay, timeStamp, readDouble ) where
 
 -- -----------------------------------------------------------------------------
 import Control.Monad.IO.Class( MonadIO, liftIO )
@@ -33,5 +33,11 @@ timeStamp :: MonadIO m => m String
 timeStamp = liftIO $ fmap showf getCurrentTime
   where
     showf = formatTime defaultTimeLocale "%F %X"
+
+-- -----------------------------------------------------------------------------
+readDouble :: String -> Maybe Double
+readDouble xs = case reads xs of
+  ((v,_):_) -> return v
+  _ -> Nothing
 
 -- -----------------------------------------------------------------------------
