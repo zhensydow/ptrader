@@ -23,21 +23,22 @@ module PTrader.Portfolio(
   Portfolio, createNewPortfolio, runPortfolio,
   -- * Portfolio Insert/Update functions
   insertBuyTransaction, insertSellTransaction, insertProfit, insertWatch,
-  insertHold, logBuy, logSell, logMarketHold, logPortfolioHold, updateHold,
-  insertStockSymbols, updateStocks, deleteHolds,
+  insertHold, logBuy, logSell, logMarketHold, logPortfolioHold, logStockValue,
+  updateHold, insertStockSymbols, updateStocks, deleteHolds,
   -- * Portfolio queries
   calcStockAmount, calcStockNet, ownedStocks, calcStockProfit,
-  calcStockPrice, calcStockMarketValue, calcStockGrossProfit, 
-  calcStockNetProfit, watchedStocks, holds
+  calcStockPrice, calcStockMarketValue, calcStockGrossProfit,
+  calcStockNetProfit, watchedStocks, holds, stockLogs
   )where
 
 -- -----------------------------------------------------------------------------
+import Prelude hiding( catch )
 import Control.Monad( when, forM, forM_, liftM )
 import Control.Monad.IO.Class( MonadIO, liftIO )
 import Control.Monad.Reader( MonadReader, ReaderT, runReaderT, ask )
 import Data.List.Split( splitOn )
 import Data.Maybe( fromJust, catMaybes )
-import Data.Time.Calendar( Day, showGregorian, fromGregorian )
+import Data.Time.Calendar( Day, showGregorian, fromGregorian, addDays )
 import Data.Fixed( resolution )
 import Data.Tuple( swap )
 import Database.SQLite(
@@ -47,7 +48,7 @@ import Database.SQLite(
 import System.Directory( copyFile )
 import PTrader.Types( StockSymbol, CashValue )
 import PTrader.Query( StockValue(..), getValue )
-import PTrader.Util( currentDay )
+import PTrader.Util( currentDay, readDouble )
 import Paths_ptrader( getDataFileName )
 
 -- -----------------------------------------------------------------------------
@@ -158,6 +159,18 @@ getStockSymbol (StockID idx) = do
       sql = "SELECT symbol FROM stock WHERE stockid=:par"
 
 -- -----------------------------------------------------------------------------
+getStockLog :: StockID -> Day -> Portfolio (Maybe CashValue)
+getStockLog (StockID idx) day = do
+  res <- execPFParamStatement sql [(":idx", Int . fromIntegral $ idx)
+                                  ,(":day", Text $ showGregorian day)]
+  case res of
+    Right ((((_,Int val):_):_):_) -> return . Just . intToCash $ val
+    _ -> return Nothing
+
+    where
+      sql = "SELECT price FROM log WHERE stockid=:idx AND date=:day"
+
+-- -----------------------------------------------------------------------------
 insertBuyTransaction :: Day -> StockSymbol -> Int -> CashValue -> CashValue
                         -> Portfolio Bool
 insertBuyTransaction day symbol amount price total = do
@@ -224,7 +237,7 @@ insertStockSymbols xs = forM_ xs $ \symbol -> do
     Just _ -> return ()
 
     where
-      sql = "INSERT INTO stock VALUES (NULL,:par)"
+      sql = "INSERT INTO stock VALUES (NULL,:par,'')"
 
 -- -----------------------------------------------------------------------------
 insertHold :: Day -> StockSymbol -> CashValue -> Portfolio Bool
@@ -238,6 +251,26 @@ insertHold day symbol price = do
                           ,(":price", cashToValue price)]
     where
       sql = "INSERT INTO hold VALUES (NULL,:stockid,:date,:price)"
+
+-- -----------------------------------------------------------------------------
+updateStockLog :: Day -> StockSymbol -> CashValue -> Portfolio Bool
+updateStockLog day symbol price = do
+  stockRet <- getStockID symbol
+  case stockRet of
+    Nothing -> return False
+    Just stock@(StockID idx) -> do
+      logVal <- getStockLog stock day
+      let params = [(":id", Int $ fromIntegral idx)
+                   ,(":date", Text $ showGregorian day)
+                   ,(":price", cashToValue price)]
+
+      case logVal of
+        Nothing -> execPFParamStatement_ sqlInsert params
+        Just _ -> execPFParamStatement_ sqlUpdate params
+
+    where
+      sqlInsert = "INSERT INTO log VALUES (:id, :date, :price)"
+      sqlUpdate = "UPDATE log SET price=:price WHERE stockid=:id AND date=:date"
 
 -- -----------------------------------------------------------------------------
 deleteHolds :: StockSymbol -> Portfolio Bool
@@ -427,6 +460,28 @@ holds = do
        return (stockid, date, price)
 
 -- -----------------------------------------------------------------------------
+stockLogs :: StockSymbol -> Portfolio [(Day, CashValue)]
+stockLogs symbol =
+  getStockID symbol >>= maybe (return []) obtainData
+
+    where
+      sql = "SELECT date, price FROM log WHERE stockid=:par"
+      obtainData (StockID idx) = do
+        let param =  [(":par",Int $ fromIntegral idx)]
+        res <- execPFParamStatement sql param
+        case res of
+          Right [rows] -> liftM catMaybes $ forM rows $ \row ->
+            case extractData row of
+              Just (Text s, Int v) -> return . Just
+                                     $ (strToDay s, intToCash v)
+              _ -> return Nothing
+          _ -> return []
+      extractData row = do
+        date <- lookup "date" row
+        price <- lookup "price" row
+        return (date, price)
+
+-- -----------------------------------------------------------------------------
 logBuy :: StockSymbol -> Int -> CashValue -> CashValue -> Portfolio Bool
 logBuy symbol amount price total = do
   day <- currentDay
@@ -462,6 +517,15 @@ logPortfolioHold symbol = do
   day <- currentDay
   val <- calcStockPrice symbol
   insertHold day symbol val
+
+-- -----------------------------------------------------------------------------
+logStockValue :: StockSymbol -> Portfolio Bool
+logStockValue symbol = do
+  day <- fmap (addDays (-1)) currentDay
+  valStr <- io $ getValue symbol PreviousClose
+  case fmap (fromRational . toRational) (readDouble valStr) of
+    Just val -> updateStockLog day symbol val
+    Nothing -> return False
 
 -- -----------------------------------------------------------------------------
 updateHold :: StockSymbol -> (StockSymbol -> Portfolio Bool) -> Portfolio Bool
