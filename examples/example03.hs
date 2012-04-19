@@ -1,4 +1,3 @@
-
 {- -----------------------------------------------------------------------------
 PTrader is a Personal Stock Trader Toolbox.
 Copyright (C) 2012  Luis Cabellos
@@ -20,7 +19,8 @@ module Main where
 
 -- -----------------------------------------------------------------------------
 import Control.Concurrent( ThreadId, forkIO, killThread )
-import Control.Monad( forM, forever )
+import Control.Monad( forM, forM_, forever )
+import Safe( readDef )
 import System.Exit( exitSuccess )
 import System.Posix.Signals( Handler(..), installHandler, sigINT )
 import System.Posix.Unistd( sleep )
@@ -28,7 +28,7 @@ import PTrader.Report(
   Report, runReport, newLine, newScreen, outStrLn,
   stocksState, indexState, stocksProfit, showHolds )
 import PTrader.Portfolio(
-  runPortfolio, ownedStocks, calcStockNet, calcStockPrice, holds )
+  runPortfolio, ownedStocks, calcStockNet, calcStockPrice, holds, logStockValue )
 import PTrader.Graph( GraphConfig(..), runGraph )
 import PTrader.Query( StockValue(..), getMulValue )
 import PTrader.Util( timeStamp )
@@ -58,8 +58,18 @@ myReport filename = do
   timeStamp >>= outStrLn
 
 -- -----------------------------------------------------------------------------
-graphUpdate :: [String] -> IO [Double]
-graphUpdate stocks = fmap (fmap read) $ getMulValue stocks Bid
+myDoubleRead :: String -> Double
+myDoubleRead [] = 0
+myDoubleRead (x:xs)
+  | x == '+' = readDef 0 xs
+  | otherwise = readDef 0 (x:xs)
+
+-- -----------------------------------------------------------------------------
+graphUpdate :: [String] -> [String] -> IO [Double]
+graphUpdate inds stocks = do
+  vis <- fmap (fmap myDoubleRead) $ getMulValue inds Change
+  vss <- fmap (fmap myDoubleRead) $ getMulValue stocks Bid
+  return $! vis ++ vss
 
 -- -----------------------------------------------------------------------------
 graphConfig :: GraphConfig
@@ -68,13 +78,24 @@ graphConfig = GraphConfig Nothing 30
 graphThread :: String -> IO ThreadId
 graphThread filename = do
   stocks <- fmap (fmap fst) $ runPortfolio ownedStocks filename
-  refvals <- fmap (fmap read) $ getMulValue stocks PreviousClose
-  forkIO $ runGraph graphConfig stocks refvals (graphUpdate stocks)
+  refvals <- fmap (fmap $ readDef 0)
+             $ getMulValue stocks PreviousClose :: IO [Double]
+  let zeros = replicate (length indexes) 0
+  forkIO $ runGraph graphConfig (indexes ++ stocks) (zeros ++ refvals)
+    (graphUpdate indexes stocks)
+
+-- -----------------------------------------------------------------------------
+logYesterday :: String -> IO ()
+logYesterday filename = do
+  stocks <- fmap (fmap fst) $ runPortfolio ownedStocks filename
+  forM_ (indexes ++ stocks) $ \s ->
+    runPortfolio (logStockValue s) filename
 
 -- -----------------------------------------------------------------------------
 mainLoop :: String -> IO ()
 mainLoop filename = do
   gtid <- graphThread filename
+  logYesterday filename
   _ <- installHandler sigINT (CatchOnce (killThread gtid >> exitSuccess)) Nothing
   forever $ do
     -- print myReport using colors
