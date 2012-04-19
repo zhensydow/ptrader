@@ -36,7 +36,9 @@ setColor (Color r g b) = Cr.setSourceRGB r g b
 
 -- -----------------------------------------------------------------------------
 styles :: [Color]
-styles = cycle [Color 1 0 0, Color 0 1 0, Color 0 0 1, Color 1 0 1]
+styles = cycle [ Color 1 0 0, Color 0 0.6 0, Color 0 0 1
+               , Color 1 0.5 0, Color 1 0 1, Color 0 0.7 1
+               , Color 0.1 0.1 0.1 ]
 
 -- -----------------------------------------------------------------------------
 render :: Double -> Double -> [String] -> [Double] -> [[Double]] -> Cr.Render ()
@@ -44,7 +46,7 @@ render w h names refvals xxs = do
   Cr.setSourceRGB 1 1 1
   Cr.rectangle 0 0 w h
   Cr.fill
-  forM_ (zip3 styles refvals rows) $ \(name,val,row) -> 
+  forM_ (zip3 styles refvals rows) $ \(name,val,row) ->
     renderLine w h name val row
   Cr.setLineCap Cr.LineCapSquare
   Cr.setLineWidth 2
@@ -55,7 +57,7 @@ render w h names refvals xxs = do
   Cr.lineTo (w - border*w) (border*w)
   Cr.lineTo (border*w) (border*w)
   Cr.stroke
-  foldM_ (renderLabel (h - 0.8*border*w)) (border*w) $ zip styles names
+  foldM_ (renderLabel (h - 0.6*border*w)) (border*w) $ zip styles names
 
     where
       rows = fmap (zip [0..]) $ transpose xxs
@@ -71,7 +73,7 @@ renderLabel y x (col,label) = do
   return $! x + Cr.textExtentsXadvance extents
 
 -- -----------------------------------------------------------------------------
-renderLine :: Double -> Double -> Color -> Double -> [(Double,Double)] 
+renderLine :: Double -> Double -> Color -> Double -> [(Double,Double)]
               -> Cr.Render ()
 renderLine _ _ _ _ [] = return ()
 renderLine w h col refval (x:xs) = do
@@ -123,7 +125,7 @@ genImage fn w h xs vals ys = Cr.withImageSurface Cr.FormatARGB32 w h $ \srf -> d
 runGraph :: GraphConfig -> [String] -> [Double] -> IO [Double] -> IO ()
 runGraph c names vals = graphLoop c names vals []
 
-graphLoop :: GraphConfig -> [String] -> [Double] -> [[Double]] -> IO [Double] 
+graphLoop :: GraphConfig -> [String] -> [Double] -> [[Double]] -> IO [Double]
              -> IO ()
 graphLoop conf names vals xs f = do
   x <- f
